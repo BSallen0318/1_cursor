@@ -16,7 +16,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="ko" suppressHydrationWarning>
       <body className="min-h-screen antialiased">
         <div id="root" className="min-h-screen">
-          {/* @ts-expect-error Server Component wrapping Client */}
           <Providers>{children}</Providers>
         </div>
       </body>

@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   const driveTokenCookie = cookieStore.get('drive_tokens')?.value;
   
   const body = await req.json().catch(() => ({}));
-  const { platforms = ['drive', 'figma'] } = body as { platforms?: string[] };
+  const { platforms = ['drive', 'figma', 'jira'] } = body as { platforms?: string[] };
 
   const results: any = {
     success: false,
@@ -213,6 +213,76 @@ export async function POST(req: Request) {
       }
     }
 
+    // Jira 색인
+    if (platforms.includes('jira')) {
+      try {
+        console.log('🔄 Jira 색인 시작...');
+        
+        const { getJiraCredentialsFromEnv, searchJiraIssuesByText, extractTextFromJiraDescription } = await import('@/lib/jira');
+        const credentials = getJiraCredentialsFromEnv();
+        
+        if (!credentials) {
+          results.platforms.jira = {
+            success: false,
+            error: 'Jira 설정이 없습니다. .env.local에 JIRA_DOMAIN, JIRA_EMAIL, JIRA_API_TOKEN을 설정하세요.'
+          };
+          console.log('⚠️ Jira 설정 없음');
+        } else {
+          // 전체 검색 (최대 100개 제한)
+          console.log(`📋 Jira 이슈 검색 시작 (최대 100개)...`);
+          
+          const { issues: allIssues } = await searchJiraIssuesByText(credentials, '', {
+            projectKeys: [],  // 전체 검색
+            maxResults: 100,
+            daysBack: 365
+          });
+
+          console.log(`📋 Jira 이슈 ${allIssues.length}개 수집 완료`);
+
+          // DB 저장 형식으로 변환
+          const docRecords: DocRecord[] = allIssues.map((issue) => {
+            const description = extractTextFromJiraDescription(issue.fields.description);
+            return {
+              id: issue.key,
+              platform: 'jira',
+              kind: 'issue',
+              title: issue.fields.summary || 'Untitled Issue',
+              snippet: description.slice(0, 500) || issue.fields.status?.name || '',
+              url: `https://${credentials.domain}/browse/${issue.key}`,
+              path: `${issue.fields.project?.key || 'JIRA'} / ${issue.key}`,
+              owner_id: issue.fields.assignee?.accountId || issue.fields.reporter?.displayName || 'unknown',
+              owner_name: issue.fields.assignee?.displayName || issue.fields.reporter?.displayName || 'Unassigned',
+              owner_email: issue.fields.assignee?.emailAddress || '',
+              updated_at: issue.fields.updated || new Date().toISOString(),
+              indexed_at: Date.now()
+            };
+          });
+
+          clearDocumentsByPlatform('jira');
+          if (docRecords.length > 0) {
+            bulkUpsertDocuments(docRecords);
+          }
+
+          const count = getDocumentCount('jira');
+          setMetadata('jira_last_sync', new Date().toISOString());
+
+          results.platforms.jira = {
+            success: true,
+            indexed: count,
+            message: `${count}개 이슈 색인 완료`
+          };
+
+          console.log(`✅ Jira 색인 완료: ${count}개`);
+        }
+      } catch (e: any) {
+        results.platforms.jira = {
+          success: false,
+          error: e?.message || 'Jira 색인 실패'
+        };
+        console.error('❌ Jira 색인 실패:', e);
+      }
+    }
+
     results.success = Object.values(results.platforms).some((p: any) => p.success);
     results.endTime = Date.now();
     results.duration = results.endTime - results.startTime;
@@ -231,10 +301,12 @@ export async function GET() {
   try {
     const driveCount = getDocumentCount('drive');
     const figmaCount = getDocumentCount('figma');
+    const jiraCount = getDocumentCount('jira');
     const totalCount = getDocumentCount();
 
     const driveLastSync = await import('@/lib/db').then(m => m.getMetadata('drive_last_sync'));
     const figmaLastSync = await import('@/lib/db').then(m => m.getMetadata('figma_last_sync'));
+    const jiraLastSync = await import('@/lib/db').then(m => m.getMetadata('jira_last_sync'));
 
     return NextResponse.json({
       success: true,
@@ -247,6 +319,10 @@ export async function GET() {
         figma: {
           count: figmaCount,
           lastSync: figmaLastSync
+        },
+        jira: {
+          count: jiraCount,
+          lastSync: jiraLastSync
         }
       }
     });

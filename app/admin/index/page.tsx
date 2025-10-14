@@ -213,7 +213,7 @@ export default function IndexManagementPage() {
           <ul className="space-y-2 text-sm text-amber-900 dark:text-amber-100">
             <li className="flex items-start gap-2">
               <span className="mt-0.5">1️⃣</span>
-              <span><strong>첫 사용 시:</strong> "전체 색인 시작" 버튼을 클릭하세요.</span>
+              <span><strong>첫 사용 시:</strong> &quot;전체 색인 시작&quot; 버튼을 클릭하세요.</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="mt-0.5">2️⃣</span>

@@ -155,12 +155,34 @@ export function upsertDocument(doc: DocRecord) {
 // 대량 삽입 (트랜잭션)
 export function bulkUpsertDocuments(docs: DocRecord[]) {
   const db = getDb();
-  const insert = db.transaction((documents: DocRecord[]) => {
-    for (const doc of documents) {
-      upsertDocument(doc);
+  const BATCH_SIZE = 500; // 한 번에 500개씩 처리
+  
+  console.log(`📦 총 ${docs.length}개 문서를 ${Math.ceil(docs.length / BATCH_SIZE)}개 배치로 나눠 저장 시작...`);
+  
+  // 배치로 나눠서 처리
+  for (let i = 0; i < docs.length; i += BATCH_SIZE) {
+    const batch = docs.slice(i, i + BATCH_SIZE);
+    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(docs.length / BATCH_SIZE);
+    
+    console.log(`   💾 배치 ${batchNum}/${totalBatches}: ${batch.length}개 저장 중... (${i + 1}~${i + batch.length})`);
+    
+    const insert = db.transaction((documents: DocRecord[]) => {
+      for (const doc of documents) {
+        upsertDocument(doc);
+      }
+    });
+    
+    try {
+      insert(batch);
+      console.log(`   ✅ 배치 ${batchNum} 저장 완료`);
+    } catch (err) {
+      console.error(`   ❌ 배치 ${batchNum} 저장 실패:`, err);
+      throw err;
     }
-  });
-  insert(docs);
+  }
+  
+  console.log(`✅ 총 ${docs.length}개 문서 DB 저장 완료`);
 }
 
 // 전문 검색 (FTS5 사용)

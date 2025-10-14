@@ -5,11 +5,11 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
 const items = [
-  { href: '/', label: '홈' },
-  { href: '/search', label: '검색' },
-  { href: '/settings/integrations', label: '설정' },
-  { href: '/admin/usage', label: '관리자' }
-];
+  { href: '/' as const, label: '홈' },
+  { href: '/search' as const, label: '검색' },
+  { href: '/settings/integrations' as const, label: '설정' },
+  { href: '/admin/usage' as const, label: '관리자' }
+] as const;
 
 export function Sidebar() {
   const pathname = usePathname();

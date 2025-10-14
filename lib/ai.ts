@@ -36,48 +36,76 @@ export async function summarizeText(text: string, query?: string): Promise<strin
   const userPrompt = [
     '역할: 기획서 전문 요약가',
     query ? `검색 의도: ${query}` : '',
-    '지시사항:',
-    '1) 문서를 처음부터 끝까지 분석해 핵심 주제/결론/근거/정책/일정을 파악할 것',
-    '2) 작성자/제목/버전/날짜 등 메타데이터는 언급하지 말 것',
-    '3) 원문을 복사하지 말고 설명형 자연어로 재서술할 것',
-    '4) 핵심이 여러 개면 각 핵심을 별도의 문장으로 기술',
-    '5) 불릿/번호/머리말 없이 순수 문장만 출력',
-    '6) 반드시 최대 8줄(8문장) 이내로 출력',
-    '7) 가능하면 “이 문서는 …을 다룹니다/제안합니다/정의합니다”로 시작',
+    '지시사항: 문서의 핵심 내용을 3~8개의 불릿 포인트로 간결하게 요약하세요.',
+    '- 각 항목은 "- "로 시작',
+    '- 메타데이터(작성자/날짜 등) 제외',
+    '- 명확하고 구체적으로 작성',
     '',
-    '문서 전체(발췌 포함):\n' + text,
+    '문서:\n' + text,
     '',
-    '출력 형식: 각 줄이 하나의 완전한 문장인 순수 텍스트(최대 8줄).'
+    '출력 형식:',
+    '- 첫 번째 핵심 내용',
+    '- 두 번째 핵심 내용',
+    '- 세 번째 핵심 내용'
   ].filter(Boolean).join('\n');
 
   if (provider === 'gemini') {
     try {
       const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 12_000);
-      const res = await fetch(`${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`, {
+      const to = setTimeout(() => ctrl.abort(), 8_000); // 12초 → 8초로 축소
+      const url = `${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+      
+      if (DEBUG) console.log('[Gemini] API 호출 시작:', GEMINI_MODEL);
+      
+      const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 600 }
+          generationConfig: { 
+            temperature: 0.1,  // 0.2 → 0.1 (더 빠르고 일관성 있음)
+            maxOutputTokens: 800,  // 1000 → 800 (3~8개 항목이면 충분)
+            topP: 0.8,  // 샘플링 범위 축소로 속도 향상
+            topK: 20
+          }
         }),
         signal: ctrl.signal
       });
       clearTimeout(to);
-      if (!res.ok) throw new Error('gemini summarize failed');
-      const json: any = await res.json();
+      
+      if (DEBUG) console.log('[Gemini] 응답 상태:', res.status, res.statusText);
+      
+      const responseText = await res.text();
+      
+      if (!res.ok) {
+        if (DEBUG) {
+          console.error('[Gemini] API 호출 실패:', res.status);
+          console.error('[Gemini] 응답 본문:', responseText.slice(0, 500));
+        }
+        throw new Error(`Gemini API error: ${res.status} - ${responseText.slice(0, 200)}`);
+      }
+      
+      const json: any = JSON.parse(responseText);
       const textOut: string | undefined = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      if (DEBUG) {
+        console.log('[Gemini] 요약 성공, 길이:', textOut?.length || 0);
+      }
+      
       if (typeof textOut === 'string' && textOut.trim()) return textOut.trim();
-      if (DEBUG) console.error('Gemini summarize empty response');
+      if (DEBUG) console.error('[Gemini] 빈 응답 또는 형식 오류:', JSON.stringify(json).slice(0, 200));
     } catch (err: any) {
-      if (DEBUG) console.error('Gemini summarize error:', err?.message || err);
+      if (DEBUG) {
+        console.error('[Gemini] 예외 발생:', err?.message || err);
+        console.error('[Gemini] 전체 에러:', err);
+      }
     }
   }
 
   if (provider === 'openai') {
     try {
       const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 12_000);
+      const to = setTimeout(() => ctrl.abort(), 8_000);
       const res = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -87,8 +115,9 @@ export async function summarizeText(text: string, query?: string): Promise<strin
         body: JSON.stringify({
           model: OPENAI_MODEL,
           messages: [{ role: 'user', content: userPrompt }],
-          temperature: 0.2,
-          max_tokens: 600
+          temperature: 0.1,
+          max_tokens: 800,
+          top_p: 0.8
         }),
         signal: ctrl.signal
       });

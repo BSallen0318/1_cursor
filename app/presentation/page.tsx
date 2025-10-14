@@ -85,7 +85,7 @@ const slides: Slide[] = [
 export default function PresentationPage() {
   const [index, setIndex] = useState(0);
   const total = slides.length;
-  const slide = useMemo(() => slides[Math.max(0, Math.min(index, total - 1))], [index]);
+  const slide = useMemo(() => slides[Math.max(0, Math.min(index, total - 1))], [index, total]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

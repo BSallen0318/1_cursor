@@ -28,6 +28,17 @@ export async function GET(_: Request, { params }: { params: { provider: string }
 			const tokens = cookies.get('figma_tokens');
 			state.figma.connected = Boolean(tokens?.value);
 		}
+		if (provider === 'jira') {
+			// Jira는 환경 변수 기반 인증 확인
+			const { getJiraCredentialsFromEnv, testJiraConnection } = await import('@/lib/jira');
+			const credentials = getJiraCredentialsFromEnv();
+			if (credentials) {
+				const isValid = await testJiraConnection(credentials);
+				state.jira.connected = isValid;
+			} else {
+				state.jira.connected = false;
+			}
+		}
 	} catch {}
 	return NextResponse.json({ provider, ...state[provider] });
 }

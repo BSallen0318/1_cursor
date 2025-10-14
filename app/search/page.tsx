@@ -85,6 +85,7 @@ export default function SearchPage() {
 
   useEffect(() => {
     if (q.trim().length > 0) onSearch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, filters]);
 
   useEffect(() => {
@@ -149,13 +150,6 @@ export default function SearchPage() {
               label="피그마"
             />
             <SourceButton 
-              source="github"
-              active={filters.source === 'github'}
-              onClick={() => setFilters((f: any) => ({ ...f, source: 'github' }))}
-              icon="💻"
-              label="깃허브"
-            />
-            <SourceButton 
               source="jira"
               active={filters.source === 'jira'}
               onClick={() => setFilters((f: any) => ({ ...f, source: 'jira' }))}
@@ -167,19 +161,11 @@ export default function SearchPage() {
 
         {/* 공지사항 - 1줄 */}
         <div className="bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-950/20 dark:to-green-950/20 rounded-xl border border-blue-200 dark:border-blue-800 px-6 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="text-xl">📢</span>
-              <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                찾아야 할 문서를 검색창에 입력해주세요. 자신이 볼 수 없는 권한의 문서, 링크를 통해서만 들어갈 수 있는 문서는 표시되지 않습니다. 그 외에 개선사항은 와니에게만 연락 주세요.
-              </span>
-            </div>
-            <a 
-              href="/admin/index" 
-              className="shrink-0 px-4 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-blue-300 dark:border-blue-700 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors"
-            >
-              🗂️ 색인 관리
-            </a>
+          <div className="flex items-center gap-3">
+            <span className="text-xl">📢</span>
+            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              찾아야 할 문서를 검색창에 입력해주세요. 자신이 볼 수 없는 권한의 문서, 링크를 통해서만 들어갈 수 있는 문서는 표시되지 않습니다. 그 외에 개선사항은 와니에게만 연락 주세요.
+            </span>
           </div>
         </div>
 

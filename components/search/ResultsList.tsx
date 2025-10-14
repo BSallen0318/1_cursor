@@ -8,8 +8,6 @@ function getPlatformIcon(platform: string): string {
       return '📊';
     case 'figma':
       return '🎨';
-    case 'github':
-      return '💻';
     case 'jira':
       return '📋';
     default:
@@ -24,8 +22,6 @@ function getPlatformColor(platform: string): string {
       return 'bg-blue-100 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400';
     case 'figma':
       return 'bg-purple-100 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400';
-    case 'github':
-      return 'bg-gray-100 dark:bg-gray-950/30 text-gray-600 dark:text-gray-400';
     case 'jira':
       return 'bg-orange-100 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400';
     default:
