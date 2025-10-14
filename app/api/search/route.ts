@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   // 🚀 DB 인덱스 검색 (우선 시도)
   if (useIndex && q.trim().length > 0) {
     try {
-      const totalCount = getDocumentCount();
+      const totalCount = await getDocumentCount();
       
       // DB에 충분한 데이터가 있으면 DB에서 검색
       if (totalCount > 50) {
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
         }
 
         // DB에서 검색 (매우 빠름!)
-        const dbResults = searchDocumentsSimple(q, {
+        const dbResults = await searchDocumentsSimple(q, {
           platform,
           limit: 100,  // 상위 100개만 가져오기
           offset: 0

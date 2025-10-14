@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { bulkUpsertDocuments, setMetadata, getDocumentCount, clearDocumentsByPlatform, type DocRecord } from '@/lib/db';
+import { bulkUpsertDocuments, setMetadata, getDocumentCount, clearDocumentsByPlatform, initSchema, type DocRecord } from '@/lib/db';
 import { driveSearchSharedDrivesEx, driveSearchSharedWithMeByText, driveSearchAggregate, driveSearchByFolderName, driveCrawlAllAccessibleFiles, driveResolvePaths } from '@/lib/drive';
 import { figmaListProjectFiles, figmaListTeamProjects, figmaAutoDiscoverTeamProjectIds, figmaCollectTextNodes } from '@/lib/api';
 
@@ -20,6 +20,10 @@ export async function POST(req: Request) {
   };
 
   try {
+    // 스키마 초기화 (없으면 자동 생성)
+    await initSchema().catch((e) => {
+      console.log('⚠️ 스키마 초기화 시도:', e.message);
+    });
     // Drive 색인
     if (platforms.includes('drive') && driveTokenCookie) {
       try {
@@ -98,11 +102,11 @@ export async function POST(req: Request) {
         }));
 
         // 기존 Drive 문서 삭제 후 새로 삽입
-        clearDocumentsByPlatform('drive');
-        bulkUpsertDocuments(docRecords);
+        await clearDocumentsByPlatform('drive');
+        await bulkUpsertDocuments(docRecords);
         
-        const count = getDocumentCount('drive');
-        setMetadata('drive_last_sync', new Date().toISOString());
+        const count = await getDocumentCount('drive');
+        await setMetadata('drive_last_sync', new Date().toISOString());
         
         results.platforms.drive = {
           success: true,
@@ -185,11 +189,11 @@ export async function POST(req: Request) {
             indexed_at: Date.now()
           }));
 
-          clearDocumentsByPlatform('figma');
-          bulkUpsertDocuments(docRecords);
+          await clearDocumentsByPlatform('figma');
+          await bulkUpsertDocuments(docRecords);
 
-          const count = getDocumentCount('figma');
-          setMetadata('figma_last_sync', new Date().toISOString());
+          const count = await getDocumentCount('figma');
+          await setMetadata('figma_last_sync', new Date().toISOString());
 
           results.platforms.figma = {
             success: true,
@@ -258,13 +262,13 @@ export async function POST(req: Request) {
             };
           });
 
-          clearDocumentsByPlatform('jira');
+          await clearDocumentsByPlatform('jira');
           if (docRecords.length > 0) {
-            bulkUpsertDocuments(docRecords);
+            await bulkUpsertDocuments(docRecords);
           }
 
-          const count = getDocumentCount('jira');
-          setMetadata('jira_last_sync', new Date().toISOString());
+          const count = await getDocumentCount('jira');
+          await setMetadata('jira_last_sync', new Date().toISOString());
 
           results.platforms.jira = {
             success: true,
@@ -299,14 +303,20 @@ export async function POST(req: Request) {
 // 색인 상태 조회
 export async function GET() {
   try {
-    const driveCount = getDocumentCount('drive');
-    const figmaCount = getDocumentCount('figma');
-    const jiraCount = getDocumentCount('jira');
-    const totalCount = getDocumentCount();
+    // 스키마 초기화 (없으면 자동 생성)
+    await initSchema().catch((e) => {
+      console.log('⚠️ 스키마 초기화 시도:', e.message);
+    });
 
-    const driveLastSync = await import('@/lib/db').then(m => m.getMetadata('drive_last_sync'));
-    const figmaLastSync = await import('@/lib/db').then(m => m.getMetadata('figma_last_sync'));
-    const jiraLastSync = await import('@/lib/db').then(m => m.getMetadata('jira_last_sync'));
+    const driveCount = await getDocumentCount('drive');
+    const figmaCount = await getDocumentCount('figma');
+    const jiraCount = await getDocumentCount('jira');
+    const totalCount = await getDocumentCount();
+
+    const { getMetadata } = await import('@/lib/db');
+    const driveLastSync = await getMetadata('drive_last_sync');
+    const figmaLastSync = await getMetadata('figma_last_sync');
+    const jiraLastSync = await getMetadata('jira_last_sync');
 
     return NextResponse.json({
       success: true,
