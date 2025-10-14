@@ -14,6 +14,7 @@ export function PreviewPane({ data, answer }: { data: any | null; answer?: { que
   const doc = (data as any)?.doc;
   const autoSummary = (data as any)?.autoSummary;
   const summaryUnsupported = (data as any)?.summaryUnsupported;
+  const error = (data as any)?.error;
   
   // 불릿 포인트 파싱
   const bulletPoints = autoSummary ? parseBulletPoints(autoSummary) : [];
@@ -34,15 +35,30 @@ export function PreviewPane({ data, answer }: { data: any | null; answer?: { que
         </div>
       )}
       <div className="flex-1 overflow-auto">
-        {(loading || !autoSummary) && (
+        {error && (
+          <div className="flex flex-col items-center justify-center gap-4 py-8">
+            <div className="text-sm text-zinc-500 text-center">
+              {error.includes('not connected') || error.includes('OAuth') || error.includes('401') 
+                ? '🔐 미리보기를 보려면 Google Drive 연동이 필요합니다.' 
+                : '⚠️ 미리보기를 불러올 수 없습니다.'}
+            </div>
+            <Link 
+              href="/settings/integrations?drive=connected"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors"
+            >
+              🔗 연동 설정 페이지로 이동
+            </Link>
+          </div>
+        )}
+        {!error && (loading || !autoSummary) && (
           <div className="grid gap-2">
             <LoadingIndicator label="문서를 분석하고 있습니다" />
           </div>
         )}
-        {(!loading && summaryUnsupported) && (
+        {!error && (!loading && summaryUnsupported) && (
           <div className="text-xs text-zinc-500">(요약이 불가한 형식입니다)</div>
         )}
-        {(!loading && !summaryUnsupported && autoSummary) && (
+        {!error && (!loading && !summaryUnsupported && autoSummary) && (
           <div className="space-y-2">
             {hasBullets ? (
               bulletPoints.map((bullet, idx) => (
