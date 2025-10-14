@@ -1,0 +1,9 @@
+[
+  {"id":"u1","name":"김개발","email":"dev@corp.com","team":"Backend","role":"admin"},
+  {"id":"u2","name":"박디자이너","email":"design@corp.com","team":"Design","role":"member"},
+  {"id":"u3","name":"이PO","email":"po@corp.com","team":"PM","role":"admin"},
+  {"id":"u4","name":"한QA","email":"qa@corp.com","team":"QA","role":"viewer"},
+  {"id":"u5","name":"최데브옵스","email":"devops@corp.com","team":"Platform","role":"member"},
+  {"id":"u6","name":"오데이터","email":"data@corp.com","team":"Data","role":"viewer"}
+]
+

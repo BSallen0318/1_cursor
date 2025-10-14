@@ -1,0 +1,13 @@
+[
+  {
+    "id": "q1",
+    "question": "로그인 화면에서 비밀번호 검증 로직은 어디에 있어?",
+    "answer": "Drive의 **Login Spec** 2.1절, GitHub의 **auth/validators.ts**, Jira **AUTH-543**를 참조하세요.",
+    "citations": [
+      { "docId": "doc_login_spec", "span": "섹션 2.1 비밀번호 정책" },
+      { "docId": "pr-1839", "span": "validators.ts diff" },
+      { "docId": "jira-543", "span": "Acceptance Criteria" }
+    ]
+  }
+]
+

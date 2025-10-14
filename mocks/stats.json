@@ -1,0 +1,19 @@
+{
+  "daily": [
+    {"date":"2025-09-01","queries":120},
+    {"date":"2025-09-02","queries":156},
+    {"date":"2025-09-03","queries":98}
+  ],
+  "platformShare": [
+    {"platform":"drive","ratio":0.33},
+    {"platform":"jira","ratio":0.27},
+    {"platform":"github","ratio":0.25},
+    {"platform":"figma","ratio":0.15}
+  ],
+  "topQueries": [
+    {"q":"비밀번호 정책","count":23},
+    {"q":"디자인 가이드","count":18},
+    {"q":"PR 릴리즈 노트","count":12}
+  ]
+}
+

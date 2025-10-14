@@ -1,0 +1,45 @@
+[
+  {
+    "id": "doc_login_spec",
+    "platform": "drive",
+    "kind": "doc",
+    "title": "Login Spec",
+    "snippet": "섹션 2.1 비밀번호 정책 요약",
+    "url": "https://drive.google.com/file/d/xxx",
+    "path": "Drive/Product/Auth/Login Spec",
+    "owner": {"id":"u3","name":"이PO","email":"po@corp.com","role":"admin"},
+    "updatedAt": "2025-09-01T10:00:00Z",
+    "tags": ["auth","password"],
+    "related": ["pr-1839","jira-543"],
+    "score": 0.98
+  },
+  {
+    "id": "pr-1839",
+    "platform": "github",
+    "kind": "pr",
+    "title": "feat(auth): add password validators",
+    "snippet": "validators.ts 추가 및 규칙 적용",
+    "url": "https://github.com/org/repo/pull/1839",
+    "path": "GitHub/org/repo#1839",
+    "owner": {"id":"u1","name":"김개발","email":"dev@corp.com","role":"admin"},
+    "updatedAt": "2025-08-28T12:30:00Z",
+    "tags": ["auth","pr"],
+    "related": ["doc_login_spec","jira-543"],
+    "score": 0.92
+  },
+  {
+    "id": "jira-543",
+    "platform": "jira",
+    "kind": "issue",
+    "title": "AUTH-543 Password Policy",
+    "snippet": "Acceptance Criteria 포함",
+    "url": "https://jira.corp.com/browse/AUTH-543",
+    "path": "Jira/AUTH/AUTH-543",
+    "owner": {"id":"u3","name":"이PO","email":"po@corp.com","role":"admin"},
+    "updatedAt": "2025-08-20T09:00:00Z",
+    "tags": ["auth","policy"],
+    "related": ["doc_login_spec","pr-1839"],
+    "score": 0.89
+  }
+]
+

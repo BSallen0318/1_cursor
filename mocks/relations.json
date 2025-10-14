@@ -1,0 +1,12 @@
+{
+  "timeline": [
+    {"id":"jira-543","type":"issue","title":"AUTH-543 Password Policy","next":"pr-1839"},
+    {"id":"pr-1839","type":"pr","title":"feat(auth): add password validators","next":"doc_login_spec"},
+    {"id":"doc_login_spec","type":"doc","title":"Login Spec"}
+  ],
+  "links": [
+    ["jira-543","pr-1839"],
+    ["pr-1839","doc_login_spec"]
+  ]
+}
+
