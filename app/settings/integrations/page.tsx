@@ -75,6 +75,16 @@ export default function IntegrationsPage() {
     <main className="p-6 max-w-7xl mx-auto space-y-8">
       <h1 className="text-2xl font-bold">연동 설정</h1>
       
+      {/* 안내 문구 */}
+      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl px-6 py-4">
+        <div className="flex items-center gap-3">
+          <span className="text-xl">💡</span>
+          <span className="text-sm font-medium text-blue-900 dark:text-blue-300">
+            OAuth를 눌러서 연동하고 전체 색인을 진행해주세요.
+          </span>
+        </div>
+      </div>
+      
       {/* 연동 카드 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {providers.map((p) => {
