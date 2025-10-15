@@ -9,20 +9,7 @@ function parseBulletPoints(text: string): string[] {
 }
 
 export function PreviewPane({ data, answer }: { data: any | null; answer?: { question: string; answer: string } | null }) {
-  if (!data && !answer) {
-    return (
-      <div className="rounded-xl border p-4 h-full flex flex-col items-center justify-center gap-4">
-        <div className="text-zinc-400">(미리보기가 없습니다)</div>
-        <Link 
-          href="/settings/integrations?drive=connected"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium transition-colors"
-        >
-          🔗 연동 설정
-        </Link>
-      </div>
-    );
-  }
-  
+  if (!data && !answer) return <div className="rounded-xl border p-4 h-full flex items-center justify-center text-zinc-400">(미리보기가 없습니다)</div>;
   const loading = (data as any)?.loading;
   const doc = (data as any)?.doc;
   const autoSummary = (data as any)?.autoSummary;
@@ -34,17 +21,9 @@ export function PreviewPane({ data, answer }: { data: any | null; answer?: { que
   const hasBullets = bulletPoints.length > 0;
   
   return (
-    <div className="rounded-2xl border p-4 flex flex-col gap-3 h-full overflow-hidden relative">
-      {/* 우측 상단 연동 설정 버튼 */}
-      <Link 
-        href="/settings/integrations?drive=connected"
-        className="absolute top-4 right-4 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-xs font-medium transition-colors z-10"
-      >
-        🔗 연동 설정
-      </Link>
-      
+    <div className="rounded-2xl border p-4 flex flex-col gap-3 h-full overflow-hidden">
       {doc && (
-        <div className="grid gap-0.5 shrink-0 pr-24">
+        <div className="grid gap-0.5 shrink-0">
           <div className="text-base font-semibold">{doc.title}</div>
           <div className="text-xs text-zinc-400">{platformLabel(doc.platform)} • {formatDate(doc.updatedAt)}</div>
           {doc.owner && (
@@ -60,7 +39,7 @@ export function PreviewPane({ data, answer }: { data: any | null; answer?: { que
           <div className="flex flex-col items-center justify-center gap-4 py-8">
             <div className="text-sm text-zinc-500 text-center">
               {error.includes('not connected') || error.includes('OAuth') || error.includes('401') 
-                ? '🔐 미리보기를 보려면 Google Drive 연동이 필요합니다. 우측 상단 "연동 설정" 버튼을 클릭하세요.' 
+                ? '🔐 미리보기를 보려면 Google Drive 연동이 필요합니다. 상단의 "연동 설정" 버튼을 클릭하세요.' 
                 : '⚠️ 미리보기를 불러올 수 없습니다.'}
             </div>
           </div>

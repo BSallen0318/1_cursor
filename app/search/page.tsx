@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import type { DocItem } from '@/types/platform';
 import { FiltersPanel } from '@/components/search/FiltersPanel';
 import { ResultsList } from '@/components/search/ResultsList';
@@ -127,35 +128,45 @@ export default function SearchPage() {
 
         {/* 문서 종류 필터 - 검색창 바로 밑 */}
         <div className="bg-white dark:bg-zinc-950 rounded-2xl shadow-md border border-zinc-200 dark:border-zinc-800 p-6">
-          <div className="flex items-center gap-4 flex-wrap">
-            <SourceButton 
-              source="all"
-              active={!filters.source || filters.source === 'all'}
-              onClick={() => setFilters((f: any) => ({ ...f, source: 'all' }))}
-              icon="📁"
-              label="전체"
-            />
-            <SourceButton 
-              source="drive"
-              active={filters.source === 'drive'}
-              onClick={() => setFilters((f: any) => ({ ...f, source: 'drive' }))}
-              icon="📊"
-              label="구글드라이브"
-            />
-            <SourceButton 
-              source="figma"
-              active={filters.source === 'figma'}
-              onClick={() => setFilters((f: any) => ({ ...f, source: 'figma' }))}
-              icon="🎨"
-              label="피그마"
-            />
-            <SourceButton 
-              source="jira"
-              active={filters.source === 'jira'}
-              onClick={() => setFilters((f: any) => ({ ...f, source: 'jira' }))}
-              icon="📋"
-              label="지라"
-            />
+          <div className="flex items-center gap-4 flex-wrap justify-between">
+            <div className="flex items-center gap-4 flex-wrap">
+              <SourceButton 
+                source="all"
+                active={!filters.source || filters.source === 'all'}
+                onClick={() => setFilters((f: any) => ({ ...f, source: 'all' }))}
+                icon="📁"
+                label="전체"
+              />
+              <SourceButton 
+                source="drive"
+                active={filters.source === 'drive'}
+                onClick={() => setFilters((f: any) => ({ ...f, source: 'drive' }))}
+                icon="📊"
+                label="구글드라이브"
+              />
+              <SourceButton 
+                source="figma"
+                active={filters.source === 'figma'}
+                onClick={() => setFilters((f: any) => ({ ...f, source: 'figma' }))}
+                icon="🎨"
+                label="피그마"
+              />
+              <SourceButton 
+                source="jira"
+                active={filters.source === 'jira'}
+                onClick={() => setFilters((f: any) => ({ ...f, source: 'jira' }))}
+                icon="📋"
+                label="지라"
+              />
+            </div>
+            
+            {/* 연동 설정 버튼 */}
+            <Link 
+              href="/settings/integrations?drive=connected"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors shadow-md"
+            >
+              🔗 연동 설정
+            </Link>
           </div>
         </div>
 
