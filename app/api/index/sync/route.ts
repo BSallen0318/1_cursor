@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { bulkUpsertDocuments, setMetadata, getDocumentCount, clearDocumentsByPlatform, initSchema, type DocRecord } from '@/lib/db';
+import { bulkUpsertDocuments, setMetadata, getDocumentCount, clearDocumentsByPlatform, initSchema, type DocRecord, getMetadata } from '@/lib/db';
 import { driveSearchSharedDrivesEx, driveSearchSharedWithMeByText, driveSearchAggregate, driveSearchByFolderName, driveCrawlAllAccessibleFiles, driveResolvePaths } from '@/lib/drive';
 import { figmaListProjectFiles, figmaListTeamProjects, figmaAutoDiscoverTeamProjectIds, figmaCollectTextNodes } from '@/lib/api';
 
@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   const driveTokenCookie = cookieStore.get('drive_tokens')?.value;
   
   const body = await req.json().catch(() => ({}));
-  const { platforms = ['drive', 'figma', 'jira'] } = body as { platforms?: string[] };
+  const { platforms = ['drive', 'figma', 'jira'], incremental = true } = body as { platforms?: string[]; incremental?: boolean };
 
   const results: any = {
     success: false,
@@ -29,14 +29,26 @@ export async function POST(req: Request) {
       try {
         const driveTokens = JSON.parse(Buffer.from(driveTokenCookie, 'base64').toString('utf-8'));
         
-        console.log('🔄 Drive 색인 시작...');
+        // 증분 색인 여부 확인
+        let modifiedTimeAfter: string | undefined = undefined;
+        if (incremental) {
+          const lastSync = await getMetadata('drive_last_sync');
+          if (lastSync) {
+            modifiedTimeAfter = lastSync;
+            console.log(`🔄 Drive 증분 색인 시작 (${lastSync} 이후 수정된 문서)...`);
+          } else {
+            console.log('🔄 Drive 전체 색인 시작 (첫 색인)...');
+          }
+        } else {
+          console.log('🔄 Drive 전체 색인 시작...');
+        }
         
         // 모든 방법으로 파일 수집 (최대한 많이)
         const [swm, sdx, agg, crawl] = await Promise.all([
           driveSearchSharedWithMeByText(driveTokens, '', 500).catch(() => ({ files: [] })),
           driveSearchSharedDrivesEx(driveTokens, '', 500).catch(() => ({ files: [] })),
           driveSearchAggregate(driveTokens, '', 'both', 500).catch(() => ({ files: [] })),
-          driveCrawlAllAccessibleFiles(driveTokens, 2000).catch(() => ({ files: [] })) // 더 많이 수집
+          driveCrawlAllAccessibleFiles(driveTokens, 2000, modifiedTimeAfter).catch(() => ({ files: [] })) // modifiedTimeAfter 전달
         ]);
 
         // 추가 폴더
@@ -101,8 +113,11 @@ export async function POST(req: Request) {
           indexed_at: Date.now()
         }));
 
-        // 기존 Drive 문서 삭제 후 새로 삽입
-        await clearDocumentsByPlatform('drive');
+        // 전체 색인일 때만 기존 문서 삭제
+        if (!incremental || !modifiedTimeAfter) {
+          await clearDocumentsByPlatform('drive');
+          console.log('📂 기존 Drive 문서 삭제 완료');
+        }
         await bulkUpsertDocuments(docRecords);
         
         const count = await getDocumentCount('drive');
@@ -140,7 +155,19 @@ export async function POST(req: Request) {
         }
 
         if (figmaToken) {
-          console.log('🔄 Figma 색인 시작...');
+          // 증분 색인 여부 확인
+          let lastSyncTime: Date | undefined = undefined;
+          if (incremental) {
+            const lastSync = await getMetadata('figma_last_sync');
+            if (lastSync) {
+              lastSyncTime = new Date(lastSync);
+              console.log(`🔄 Figma 증분 색인 시작 (${lastSync} 이후 수정된 문서)...`);
+            } else {
+              console.log('🔄 Figma 전체 색인 시작 (첫 색인)...');
+            }
+          } else {
+            console.log('🔄 Figma 전체 색인 시작...');
+          }
 
           let teamIds = (process.env.FIGMA_TEAM_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
           let projectIds = (process.env.FIGMA_PROJECT_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -163,7 +190,7 @@ export async function POST(req: Request) {
           }
 
           // 프로젝트 → 파일 수집
-          const allFiles: Array<{ key: string; name: string; last_modified: string }> = [];
+          let allFiles: Array<{ key: string; name: string; last_modified: string }> = [];
           for (const pid of projectIds) {
             try {
               const list = await figmaListProjectFiles(pid, figmaToken);
@@ -171,7 +198,14 @@ export async function POST(req: Request) {
             } catch {}
           }
 
-          console.log(`🎨 Figma 파일 ${allFiles.length}개 수집 완료`);
+          // 증분 색인: 마지막 색인 시간 이후 수정된 파일만 필터링
+          if (lastSyncTime) {
+            const beforeCount = allFiles.length;
+            allFiles = allFiles.filter(f => new Date(f.last_modified) > lastSyncTime!);
+            console.log(`🎨 Figma 파일 ${allFiles.length}개 수집 완료 (전체 ${beforeCount}개 중 필터링)`);
+          } else {
+            console.log(`🎨 Figma 파일 ${allFiles.length}개 수집 완료`);
+          }
 
           // DB 저장 형식으로 변환
           const docRecords: DocRecord[] = allFiles.map((f) => ({
@@ -189,7 +223,11 @@ export async function POST(req: Request) {
             indexed_at: Date.now()
           }));
 
-          await clearDocumentsByPlatform('figma');
+          // 전체 색인일 때만 기존 문서 삭제
+          if (!incremental || !lastSyncTime) {
+            await clearDocumentsByPlatform('figma');
+            console.log('🎨 기존 Figma 문서 삭제 완료');
+          }
           await bulkUpsertDocuments(docRecords);
 
           const count = await getDocumentCount('figma');
@@ -220,8 +258,6 @@ export async function POST(req: Request) {
     // Jira 색인
     if (platforms.includes('jira')) {
       try {
-        console.log('🔄 Jira 색인 시작...');
-        
         const { getJiraCredentialsFromEnv, searchJiraIssuesByText, extractTextFromJiraDescription } = await import('@/lib/jira');
         const credentials = getJiraCredentialsFromEnv();
         
@@ -232,13 +268,25 @@ export async function POST(req: Request) {
           };
           console.log('⚠️ Jira 설정 없음');
         } else {
-          // 전체 검색 (최대 100개 제한)
-          console.log(`📋 Jira 이슈 검색 시작 (최대 100개)...`);
+          // 증분 색인 여부 확인
+          let updatedAfter: string | undefined = undefined;
+          if (incremental) {
+            const lastSync = await getMetadata('jira_last_sync');
+            if (lastSync) {
+              updatedAfter = lastSync;
+              console.log(`🔄 Jira 증분 색인 시작 (${lastSync} 이후 수정된 이슈)...`);
+            } else {
+              console.log('🔄 Jira 전체 색인 시작 (첫 색인, 최대 100개)...');
+            }
+          } else {
+            console.log('🔄 Jira 전체 색인 시작 (최대 100개)...');
+          }
           
           const { issues: allIssues } = await searchJiraIssuesByText(credentials, '', {
             projectKeys: [],  // 전체 검색
             maxResults: 100,
-            daysBack: 365
+            daysBack: 365,
+            updatedAfter
           });
 
           console.log(`📋 Jira 이슈 ${allIssues.length}개 수집 완료`);
@@ -262,7 +310,11 @@ export async function POST(req: Request) {
             };
           });
 
-          await clearDocumentsByPlatform('jira');
+          // 전체 색인일 때만 기존 문서 삭제
+          if (!incremental || !updatedAfter) {
+            await clearDocumentsByPlatform('jira');
+            console.log('📋 기존 Jira 문서 삭제 완료');
+          }
           if (docRecords.length > 0) {
             await bulkUpsertDocuments(docRecords);
           }

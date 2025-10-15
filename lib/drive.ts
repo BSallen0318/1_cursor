@@ -482,11 +482,17 @@ export async function driveSearchByFolderName(tokens: DriveTokens, q: string, li
 
 // 접근 가능한 모든 드라이브(allDrives)를 전수 페이징으로 수집한 뒤 서버에서 필터합니다.
 // 멤버가 아닌 공유 드라이브의 깊은 하위 파일을 놓치는 경우의 안전망입니다.
-export async function driveCrawlAllAccessibleFiles(tokens: DriveTokens, limit: number = 1000) {
+export async function driveCrawlAllAccessibleFiles(tokens: DriveTokens, limit: number = 1000, modifiedTimeAfter?: string) {
   const google = await getGoogle();
   const oauth2 = await createOAuthClient();
   oauth2.setCredentials(tokens);
   const drive = google.drive({ version: 'v3', auth: oauth2 });
+
+  // 쿼리 구성: modifiedTimeAfter가 있으면 추가
+  let query = 'trashed = false';
+  if (modifiedTimeAfter) {
+    query += ` and modifiedTime >= '${modifiedTimeAfter}'`;
+  }
 
   const results: any[] = [];
   let token: string | undefined = undefined;
@@ -494,7 +500,7 @@ export async function driveCrawlAllAccessibleFiles(tokens: DriveTokens, limit: n
     const r = await drive.files
       .list({
         corpora: 'allDrives',
-        q: `trashed = false`,
+        q: query,
         pageSize: Math.min(100, limit - results.length),
         pageToken: token,
         includeItemsFromAllDrives: true,

@@ -109,9 +109,10 @@ export async function searchJiraIssuesByText(
     projectKeys?: string[];
     maxResults?: number;
     daysBack?: number;  // 최근 N일 이내 이슈 검색 (기본: 730일 = 2년)
+    updatedAfter?: string;  // ISO 날짜 형식 (예: '2025-10-15T08:00:00Z')
   } = {}
 ): Promise<{ issues: JiraIssue[]; total: number }> {
-  const { projectKeys = [], maxResults = 5000, daysBack = 730 } = options;
+  const { projectKeys = [], maxResults = 5000, daysBack = 730, updatedAfter } = options;
 
   // JQL 쿼리 구성 - 조건과 ORDER BY를 분리
   const conditions: string[] = [];
@@ -127,10 +128,14 @@ export async function searchJiraIssuesByText(
     conditions.push(searchQuery);
   }
 
-  // 날짜 범위 필터 (최근 N일, 무제한 검색 방지)
-  // Jira는 무제한 쿼리를 차단하므로 최소한의 조건 필요
-  if (conditions.length === 0 || projectKeys.length === 0) {
-    // 조건이 없거나 프로젝트 필터가 없으면 날짜 범위 추가
+  // 날짜 범위 필터
+  if (updatedAfter) {
+    // 특정 날짜 이후 (증분 색인용)
+    // JQL 날짜 형식: 'YYYY-MM-DD HH:mm'
+    const jiraDate = new Date(updatedAfter).toISOString().replace('T', ' ').slice(0, 16);
+    conditions.push(`updated >= '${jiraDate}'`);
+  } else if (conditions.length === 0 || projectKeys.length === 0) {
+    // 조건이 없거나 프로젝트 필터가 없으면 날짜 범위 추가 (무제한 검색 방지)
     conditions.push(`updated >= -${daysBack}d`);
   }
 

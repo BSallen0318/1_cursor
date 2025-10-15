@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 type Provider = 'drive' | 'jira' | 'figma';
 const providers: Provider[] = ['drive', 'jira', 'figma'];
@@ -48,7 +49,7 @@ export default function IntegrationsPage() {
     setStates((s) => ({ ...s, [p]: json }));
   };
 
-  const startSync = async (platforms: string[]) => {
+  const startSync = async (platforms: string[], incremental: boolean = true) => {
     setSyncing(true);
     setSyncResult(null);
     try {
@@ -56,7 +57,7 @@ export default function IntegrationsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ platforms })
+        body: JSON.stringify({ platforms, incremental })
       });
       const data = await res.json();
       setSyncResult(data);
@@ -73,7 +74,16 @@ export default function IntegrationsPage() {
 
   return (
     <main className="p-6 max-w-7xl mx-auto space-y-8">
-      <h1 className="text-2xl font-bold">연동 설정</h1>
+      <div className="flex items-center gap-4">
+        <Link 
+          href="/search"
+          className="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
+          aria-label="뒤로가기"
+        >
+          ←
+        </Link>
+        <h1 className="text-2xl font-bold">연동 설정</h1>
+      </div>
       
       {/* 안내 문구 */}
       <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl px-6 py-4">
@@ -117,22 +127,22 @@ export default function IntegrationsPage() {
                       isConnected ? 'translate-x-8' : 'translate-x-1'
                     }`}
                   />
-                </button>
+            </button>
                 <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
                   {isConnected ? 'ON' : 'OFF'}
                 </span>
               </div>
 
                   {/* OAuth 버튼 또는 설정 안내 */}
-                  {p === 'drive' && (
+            {p === 'drive' && (
                     <a 
                       href="/api/integrations/drive/auth" 
                       className="inline-flex items-center justify-center h-9 px-4 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-900 text-sm font-medium transition-colors"
                     >
                       Google OAuth
                     </a>
-                  )}
-                  {p === 'figma' && (
+            )}
+            {p === 'figma' && (
                     <a 
                       href="/api/integrations/figma/auth" 
                       className="inline-flex items-center justify-center h-9 px-4 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-900 text-sm font-medium transition-colors"
@@ -175,30 +185,30 @@ export default function IntegrationsPage() {
               <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/30 dark:to-green-900/30 p-4 rounded-xl border border-green-200 dark:border-green-800">
                 <div className="text-sm text-green-600 dark:text-green-400 font-medium mb-1">📊 Drive</div>
                 <div className="text-3xl font-bold text-green-900 dark:text-green-100">{indexStatus.platforms?.drive?.count?.toLocaleString() || 0}</div>
-                <div className="text-xs text-green-600 dark:text-green-400 mt-1">
+                <div className="text-xs text-green-600 dark:text-green-400 mt-2">
                   {indexStatus.platforms?.drive?.lastSync 
-                    ? `${new Date(indexStatus.platforms.drive.lastSync).toLocaleString()}`
-                    : '미동기화'
+                    ? `⏰ ${new Date(indexStatus.platforms.drive.lastSync).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                    : '⚠️ 미동기화'
                   }
                 </div>
               </div>
               <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/30 dark:to-purple-900/30 p-4 rounded-xl border border-purple-200 dark:border-purple-800">
                 <div className="text-sm text-purple-600 dark:text-purple-400 font-medium mb-1">🎨 Figma</div>
                 <div className="text-3xl font-bold text-purple-900 dark:text-purple-100">{indexStatus.platforms?.figma?.count?.toLocaleString() || 0}</div>
-                <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                <div className="text-xs text-purple-600 dark:text-purple-400 mt-2">
                   {indexStatus.platforms?.figma?.lastSync 
-                    ? `${new Date(indexStatus.platforms.figma.lastSync).toLocaleString()}`
-                    : '미동기화'
+                    ? `⏰ ${new Date(indexStatus.platforms.figma.lastSync).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                    : '⚠️ 미동기화'
                   }
                 </div>
               </div>
               <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-950/30 dark:to-orange-900/30 p-4 rounded-xl border border-orange-200 dark:border-orange-800">
                 <div className="text-sm text-orange-600 dark:text-orange-400 font-medium mb-1">📋 Jira</div>
                 <div className="text-3xl font-bold text-orange-900 dark:text-orange-100">{indexStatus.platforms?.jira?.count?.toLocaleString() || 0}</div>
-                <div className="text-xs text-orange-600 dark:text-orange-400 mt-1">
+                <div className="text-xs text-orange-600 dark:text-orange-400 mt-2">
                   {indexStatus.platforms?.jira?.lastSync 
-                    ? `${new Date(indexStatus.platforms.jira.lastSync).toLocaleString()}`
-                    : '미동기화'
+                    ? `⏰ ${new Date(indexStatus.platforms.jira.lastSync).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                    : '⚠️ 미동기화'
                   }
                 </div>
               </div>
@@ -217,43 +227,74 @@ export default function IntegrationsPage() {
               <div className="flex items-start gap-3">
                 <span className="text-2xl">💡</span>
                 <div className="flex-1 text-sm text-blue-700 dark:text-blue-300">
-                  색인을 실행하면 모든 문서가 데이터베이스에 저장되어 <strong>검색 속도가 100배 빨라집니다!</strong>
-                  <br />⏱️ 소요 시간: 약 30초 ~ 2분
+                  <strong>증분 색인</strong>: 마지막 색인 이후 수정된 문서만 업데이트 (5-15초) ⚡
+                  <br />
+                  <strong>전체 색인</strong>: 모든 문서를 새로 색인 (30초-2분, 권한/삭제 반영)
                 </div>
               </div>
             </div>
 
+            {/* 증분 색인 버튼 (기본) */}
             <div className="flex gap-3 flex-wrap">
               <button
-                onClick={() => startSync(['drive', 'figma', 'jira'])}
+                onClick={() => startSync(['drive', 'figma', 'jira'], true)}
                 disabled={syncing}
-                className="flex-1 min-w-[200px] h-14 px-6 rounded-xl bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 min-w-[200px] h-14 px-6 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {syncing ? '⏳ 색인 중...' : '🔄 전체 색인 (Drive + Figma + Jira)'}
+                {syncing ? '⏳ 색인 중...' : '⚡ 증분 색인 (빠른 업데이트)'}
+              </button>
+              <button
+                onClick={() => startSync(['drive', 'figma', 'jira'], false)}
+                disabled={syncing}
+                className="min-w-[150px] h-14 px-6 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                🔄 전체 색인
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* 개별 플랫폼 버튼 */}
+            <div className="grid grid-cols-2 gap-3">
               <button
-                onClick={() => startSync(['drive'])}
+                onClick={() => startSync(['drive'], true)}
                 disabled={syncing}
-                className="h-12 px-4 rounded-xl border-2 border-green-500 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/20 font-semibold transition-all disabled:opacity-50"
+                className="h-10 px-4 rounded-lg border-2 border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 font-medium text-sm transition-all disabled:opacity-50"
               >
-                📊 Drive만
+                ⚡📊 Drive 증분
               </button>
               <button
-                onClick={() => startSync(['figma'])}
+                onClick={() => startSync(['drive'], false)}
                 disabled={syncing}
-                className="h-12 px-4 rounded-xl border-2 border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/20 font-semibold transition-all disabled:opacity-50"
+                className="h-10 px-4 rounded-lg border-2 border-green-500 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/20 font-medium text-sm transition-all disabled:opacity-50"
               >
-                🎨 Figma만
+                🔄📊 Drive 전체
               </button>
               <button
-                onClick={() => startSync(['jira'])}
+                onClick={() => startSync(['figma'], true)}
                 disabled={syncing}
-                className="h-12 px-4 rounded-xl border-2 border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20 font-semibold transition-all disabled:opacity-50"
+                className="h-10 px-4 rounded-lg border-2 border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 font-medium text-sm transition-all disabled:opacity-50"
               >
-                📋 Jira만
+                ⚡🎨 Figma 증분
+              </button>
+              <button
+                onClick={() => startSync(['figma'], false)}
+                disabled={syncing}
+                className="h-10 px-4 rounded-lg border-2 border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/20 font-medium text-sm transition-all disabled:opacity-50"
+              >
+                🔄🎨 Figma 전체
+              </button>
+              <button
+                onClick={() => startSync(['jira'], true)}
+                disabled={syncing}
+                className="h-10 px-4 rounded-lg border-2 border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 font-medium text-sm transition-all disabled:opacity-50"
+              >
+                ⚡📋 Jira 증분
+              </button>
+              <button
+                onClick={() => startSync(['jira'], false)}
+                disabled={syncing}
+                className="h-10 px-4 rounded-lg border-2 border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20 font-medium text-sm transition-all disabled:opacity-50"
+              >
+                🔄📋 Jira 전체
               </button>
             </div>
           </div>
@@ -280,8 +321,8 @@ export default function IntegrationsPage() {
                 >
                   <span className="font-semibold capitalize">{platform}: </span>
                   {data.success ? data.message : data.error}
-                </div>
-              ))}
+          </div>
+        ))}
             </div>
           )}
         </div>
