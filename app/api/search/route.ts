@@ -169,16 +169,37 @@ export async function POST(req: Request) {
             const semanticStartTime = Date.now();
             const [qv] = await embedTexts([q]);
             
-            // 결과가 적으면 전체 DB에서 상위 100개를 가져와 검색
+            // 결과가 적으면 키워드 추출 후 확장 검색
             let pool = filtered;
             if (filtered.length < 20) {
               debug.semanticExpandedSearch = true;
-              // DB에서 최신 100개 문서 가져오기
-              const allDocs = await searchDocumentsSimple('', {
-                platform,
-                limit: 100,
-                offset: 0
-              });
+              
+              // 검색어에서 의미있는 키워드 추출 (2글자 이상)
+              const keywords = q
+                .replace(/[을를이가에서와과는도]$/g, '') // 조사 제거
+                .split(/[\s,.\-_]+/)
+                .filter(k => k.length >= 2)
+                .slice(0, 3); // 상위 3개만
+              
+              debug.extractedKeywords = keywords;
+              
+              // 키워드로 DB 검색
+              let expandedDocs: DocRecord[] = [];
+              for (const keyword of keywords) {
+                const docs = await searchDocumentsSimple(keyword, {
+                  platform,
+                  limit: 50,
+                  offset: 0
+                });
+                expandedDocs = expandedDocs.concat(docs);
+              }
+              
+              // 중복 제거
+              const uniqueMap = new Map();
+              for (const doc of expandedDocs) {
+                uniqueMap.set(doc.id, doc);
+              }
+              const allDocs = Array.from(uniqueMap.values()).slice(0, 100);
               pool = allDocs.map((doc: DocRecord) => {
                 let snippet = doc.snippet || '';
                 if (doc.content) {
@@ -223,8 +244,9 @@ export async function POST(req: Request) {
               sims[pool[i].id] = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
             }
             
-            // 의미 유사도로 필터링 (0.3 이상만)
-            const similarDocs = pool.filter((d: any) => (sims[d.id] || 0) >= 0.3);
+            // 의미 유사도로 필터링 (0.5 이상만 - 더 엄격하게)
+            const similarDocs = pool.filter((d: any) => (sims[d.id] || 0) >= 0.5);
+            debug.semanticThreshold = 0.5;
             
             // 기존 filtered와 병합
             const mergedMap = new Map();
