@@ -178,8 +178,8 @@ export async function POST(req: Request) {
               
               // 검색어에서 의미있는 키워드 추출 (2글자 이상)
               let keywords = q
-                .replace(/[을를이가에서와과는도]$/g, '') // 조사 제거
-                .split(/[\s,.\-_]+/)
+                .split(/[\s,.\-_]+/) // 먼저 분리
+                .map(k => k.replace(/[을를이가에서와과는도한]$/g, '')) // 각 단어의 조사 제거
                 .filter(k => k.length >= 2)
                 .slice(0, 3); // 상위 3개만
               
@@ -194,6 +194,8 @@ export async function POST(req: Request) {
                 }
               }
               keywords = [...new Set(expandedKeywords)].slice(0, 5); // 중복 제거, 최대 5개
+              
+              console.log('🔍 확장된 키워드:', keywords);
               
               debug.extractedKeywords = keywords;
               
