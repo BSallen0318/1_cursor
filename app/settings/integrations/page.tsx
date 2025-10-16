@@ -260,14 +260,29 @@ export default function IntegrationsPage() {
           <h3 className="text-lg font-bold mb-4">🚀 색인 실행</h3>
           
           <div className="space-y-4">
-            {/* 색인 버튼 - 증분 색인만 */}
-            <button
-              onClick={() => startSync(['drive', 'figma', 'jira'], true)}
-              disabled={syncing}
-              className="w-full h-14 px-6 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {syncing ? '⏳ 색인 중...' : '🚀 색인 실행'}
-            </button>
+            {/* 색인 버튼 */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => startSync(['drive', 'figma', 'jira'], true)}
+                disabled={syncing}
+                className="flex-1 h-14 px-6 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {syncing ? '⏳ 색인 중...' : '➕ 추가 색인'}
+              </button>
+              <button
+                onClick={() => startSync(['drive', 'figma', 'jira'], false)}
+                disabled={syncing}
+                className="flex-1 h-14 px-6 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {syncing ? '⏳ 색인 중...' : '🔄 전체 색인'}
+              </button>
+            </div>
+            
+            <div className="text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900 p-3 rounded-lg">
+              <strong>➕ 추가 색인</strong>: 마지막 전체 색인 시점 이후 수정된 문서만 추가 (빠름, 여러 사람이 번갈아 실행 가능)
+              <br />
+              <strong>🔄 전체 색인</strong>: 모든 문서를 다시 색인 (느림, 타임스탬프 갱신)
+            </div>
           </div>
 
           {/* 색인 결과 */}

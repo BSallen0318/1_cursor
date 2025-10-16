@@ -121,7 +121,14 @@ export async function POST(req: Request) {
         await bulkUpsertDocuments(docRecords);
         
         const count = await getDocumentCount('drive');
-        await setMetadata('drive_last_sync', new Date().toISOString());
+        
+        // 전체 색인일 때만 타임스탬프 업데이트 (추가 색인은 기존 타임스탬프 유지)
+        if (!incremental || !modifiedTimeAfter) {
+          await setMetadata('drive_last_sync', new Date().toISOString());
+          console.log('📅 Drive 색인 타임스탬프 업데이트');
+        } else {
+          console.log('📅 Drive 추가 색인 완료 (타임스탬프 유지)');
+        }
         
         results.platforms.drive = {
           success: true,
@@ -231,7 +238,14 @@ export async function POST(req: Request) {
           await bulkUpsertDocuments(docRecords);
 
           const count = await getDocumentCount('figma');
-          await setMetadata('figma_last_sync', new Date().toISOString());
+          
+          // 전체 색인일 때만 타임스탬프 업데이트
+          if (!incremental || !lastSyncTime) {
+            await setMetadata('figma_last_sync', new Date().toISOString());
+            console.log('📅 Figma 색인 타임스탬프 업데이트');
+          } else {
+            console.log('📅 Figma 추가 색인 완료 (타임스탬프 유지)');
+          }
 
           results.platforms.figma = {
             success: true,
@@ -319,7 +333,14 @@ export async function POST(req: Request) {
           }
 
           const count = await getDocumentCount('jira');
-          await setMetadata('jira_last_sync', new Date().toISOString());
+          
+          // 전체 색인일 때만 타임스탬프 업데이트
+          if (!incremental || !updatedAfter) {
+            await setMetadata('jira_last_sync', new Date().toISOString());
+            console.log('📅 Jira 색인 타임스탬프 업데이트');
+          } else {
+            console.log('📅 Jira 추가 색인 완료 (타임스탬프 유지)');
+          }
 
           results.platforms.jira = {
             success: true,
