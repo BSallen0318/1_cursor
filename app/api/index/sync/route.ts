@@ -69,9 +69,9 @@ export async function POST(req: Request) {
         for (const it of (crawl.files || [])) if (it?.id) mergedMap.set(it.id, it);
         for (const it of extraResults) if (it?.id) mergedMap.set(it.id, it);
 
-        // 폴더 제외
+        // 폴더 제외 + 내 드라이브 제외 (공유 드라이브만 색인)
         const files = Array.from(mergedMap.values()).filter(
-          (f: any) => f.mimeType !== 'application/vnd.google-apps.folder'
+          (f: any) => f.mimeType !== 'application/vnd.google-apps.folder' && f.driveId // driveId가 있는 공유 드라이브만
         );
 
         console.log(`📂 Drive 파일 ${files.length}개 수집 완료`);
