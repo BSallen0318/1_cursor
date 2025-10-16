@@ -107,7 +107,8 @@ export async function POST(req: Request) {
             },
             updatedAt: doc.updated_at || new Date().toISOString(),
             tags: [doc.platform],
-            score: 1
+            score: 1,
+            content: doc.content  // Gemini 의미 검색용
           };
         });
 
@@ -155,7 +156,7 @@ export async function POST(req: Request) {
         };
 
         // 점수 계산
-        filtered = filtered.map((d) => ({
+        filtered = filtered.map((d: any) => ({
           ...d,
           _titleScore: computeTitleScore(d.title, q),
           _contentScore: computeContentScore(d.snippet, q),
@@ -264,13 +265,18 @@ export async function POST(req: Request) {
         // 페이지네이션
         const total = filtered.length;
         const start = Math.max(0, (page - 1) * size);
-        const paged = filtered.slice(start, start + size).map((d) => ({
-          ...d,
-          highlight: {
-            title: matchHighlight(d.title, q),
-            snippet: matchHighlight(d.snippet, q)
-          }
-        }));
+        const paged = filtered.slice(start, start + size).map((d: any) => {
+          const result: any = {
+            ...d,
+            highlight: {
+              title: matchHighlight(d.title, q),
+              snippet: matchHighlight(d.snippet, q)
+            }
+          };
+          // content는 클라이언트에 보내지 않음 (용량 큰 데이터)
+          delete result.content;
+          return result;
+        });
 
         debug.searchTime = Date.now() - startTime;
         debug.source = 'database_index';
