@@ -171,7 +171,7 @@ export async function POST(req: Request) {
             const [qv] = await embedTexts([q]);
             
             // 검색어에서 키워드 추출 (상위 스코프로 이동)
-            const stopWords = ['찾아', '찾아줘', '알려', '알려줘', '문서', '관련', '대한', '에서', '있는', '있었', '보여', '주세요'];
+            const stopWords = ['찾아', '찾아줘', '알려', '알려줘', '문서', '관련', '대한', '에서', '있는', '있었', '보여', '주세요', '관련한', '있는지', '인지', '내용'];
             let keywords = q
               .split(/[\s,.\-_]+/)
               .map(k => k.replace(/[을를이가에서와과는도한줘]$/g, ''))
@@ -179,12 +179,12 @@ export async function POST(req: Request) {
               .filter(k => !stopWords.includes(k))
               .slice(0, 5);
             
-            // 변형 키워드 추가
+            // 변형 키워드 추가 (스마트하게)
             const expandedKeywords: string[] = [...keywords];
             for (const kw of keywords) {
+              // 2글자 단위로만 자르기 (의미 있는 단위)
               if (kw.length >= 4) {
-                expandedKeywords.push(kw.slice(0, 2));
-                if (kw.length >= 5) expandedKeywords.push(kw.slice(0, 3));
+                expandedKeywords.push(kw.slice(0, 2)); // 앞 2글자만
               }
             }
             keywords = [...new Set(expandedKeywords)].slice(0, 5);
@@ -256,11 +256,12 @@ export async function POST(req: Request) {
                 }
               }
               
-              // Gemini 처리: 모든 키워드 매칭 문서 (제한 없음)
-              // 실제로 2-3분 timeout 발생하지 않음
-              debug.semanticPoolSize = allDocs.length;
-              debug.semanticPoolLimited = false;
-              pool = allDocs.map((doc: DocRecord) => {
+              // Gemini 처리: 상위 200개로 제한 (속도와 정확도 균형)
+              const topDocs = allDocs.slice(0, 200);
+              debug.semanticPoolSize = topDocs.length;
+              debug.semanticPoolLimited = allDocs.length > 200;
+              debug.semanticPoolTotal = allDocs.length;
+              pool = topDocs.map((doc: DocRecord) => {
                 let snippet = doc.snippet || '';
                 if (doc.content) {
                   snippet = doc.content.slice(0, 200) + (doc.content.length > 200 ? '...' : '');

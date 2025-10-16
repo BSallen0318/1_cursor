@@ -29,9 +29,17 @@ function getPlatformColor(platform: string): string {
   }
 }
 
-export function ResultCard({ item, active, onClick }: { item: DocItem; active?: boolean; onClick?: () => void }) {
+export function ResultCard({ item, active, onClick, searchContent, query }: { item: DocItem; active?: boolean; onClick?: () => void; searchContent?: boolean; query?: string }) {
   const platformIcon = getPlatformIcon(item.platform);
   const platformColor = getPlatformColor(item.platform);
+  
+  // 즉시 이동 URL 생성
+  let targetUrl = (item as any).url || `/docs/${item.id}`;
+  if (searchContent && query) {
+    // Chrome의 Text Fragment를 사용하여 검색어 위치로 이동
+    const keywords = query.split(/[\s,.\-_]+/).slice(0, 3).join(',');
+    targetUrl += `#:~:text=${encodeURIComponent(keywords)}`;
+  }
   
   return (
     <li className={`rounded-xl p-4 border ${active ? 'bg-zinc-50 dark:bg-zinc-900/30 border-zinc-400' : ''}`} onClick={onClick}>
@@ -52,22 +60,22 @@ export function ResultCard({ item, active, onClick }: { item: DocItem; active?: 
         <Link 
           target="_blank" 
           rel="noopener noreferrer" 
-          href={(item as any).url || `/docs/${item.id}`} 
-          className="shrink-0 px-3 h-8 rounded-lg border hover:bg-zinc-50 dark:hover:bg-zinc-900 flex items-center"
+          href={targetUrl} 
+          className={`shrink-0 px-3 h-8 rounded-lg border flex items-center ${searchContent ? 'bg-green-500 text-white hover:bg-green-600' : 'hover:bg-zinc-50 dark:hover:bg-zinc-900'}`}
         >
-          문서 연결
+          {searchContent ? '🚀 즉시 이동' : '문서 연결'}
         </Link>
       </div>
     </li>
   );
 }
 
-export function ResultsList({ items, activeId, onSelect }: { items: DocItem[]; activeId?: string; onSelect?: (id: string) => void }) {
+export function ResultsList({ items, activeId, onSelect, searchContent, query }: { items: DocItem[]; activeId?: string; onSelect?: (id: string) => void; searchContent?: boolean; query?: string }) {
   if (!items.length) return <div className="text-zinc-500">검색 결과가 없습니다.</div>;
   return (
     <ul className="grid gap-3">
       {items.map((it) => (
-        <ResultCard key={it.id} item={it} active={activeId === it.id} onClick={() => onSelect && onSelect(it.id)} />
+        <ResultCard key={it.id} item={it} active={activeId === it.id} onClick={() => onSelect && onSelect(it.id)} searchContent={searchContent} query={query} />
       ))}
     </ul>
   );

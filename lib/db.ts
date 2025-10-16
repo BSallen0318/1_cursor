@@ -250,10 +250,12 @@ export async function searchDocumentsSimple(query: string, options: {
     const offset = options.offset || 0;
     
     // 검색어를 단어로 분리
+    const stopWords = ['찾아', '찾아줘', '알려', '알려줘', '문서', '관련', '대한', '에서', '있는', '있었', '보여', '주세요', '관련한', '있는지', '인지', '내용'];
     const words = query.toLowerCase()
       .split(/[\s,.\-_]+/)
-      .map(w => w.replace(/[을를이가에서와과는도한]$/g, '')) // 조사 제거
-      .filter(w => w.length >= 2); // 2글자 이상만
+      .map(w => w.replace(/[을를이가에서와과는도한줘]$/g, '')) // 조사 제거
+      .filter(w => w.length >= 2) // 2글자 이상만
+      .filter(w => !stopWords.includes(w)); // stop words 제거
     
     // 각 단어를 개별 패턴으로
     const patterns = words.length > 0 ? words.map(w => `%${w}%`) : [`%${query.toLowerCase()}%`];

@@ -43,6 +43,7 @@ export default function SearchPage() {
   const abortRef = useRef<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchContent, setSearchContent] = useState(false); // 내용 찾기 체크박스
 
   const onSearch = async () => {
     setLoading(true);
@@ -55,7 +56,7 @@ export default function SearchPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ q, page, size: 10, filters, sort: filters?.sort || 'relevance', fast: false }),
+        body: JSON.stringify({ q, page, size: 10, filters, sort: filters?.sort || 'relevance', fast: !searchContent }),
         signal: controller.signal
       });
       const text = await res.text();
@@ -109,20 +110,36 @@ export default function SearchPage() {
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         {/* 검색창 - 맨 위 */}
         <div className="bg-white dark:bg-zinc-950 rounded-2xl shadow-lg border border-zinc-200 dark:border-zinc-800 p-6">
-          <div className="flex items-center gap-3">
-            <input 
-              value={q} 
-              onChange={(e) => setQ(e.target.value)} 
-              onKeyDown={(e) => { if (e.key === 'Enter') { setPage(1); onSearch(); } }} 
-              placeholder="찾는 기획서에 관련된 정보를 입력해주세요" 
-              className="flex-1 border-2 border-zinc-200 dark:border-zinc-700 rounded-xl px-5 h-14 text-lg focus:border-green-500 focus:outline-none transition-colors" 
-            />
-            <button 
-              className="h-14 px-8 rounded-xl bg-green-500 hover:bg-green-600 text-white font-semibold transition-colors shadow-md" 
-              onClick={() => { setPage(1); onSearch(); }}
-            >
-              검색
-            </button>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <input 
+                value={q} 
+                onChange={(e) => setQ(e.target.value)} 
+                onKeyDown={(e) => { if (e.key === 'Enter') { setPage(1); onSearch(); } }} 
+                placeholder="찾는 기획서에 관련된 정보를 입력해주세요" 
+                className="flex-1 border-2 border-zinc-200 dark:border-zinc-700 rounded-xl px-5 h-14 text-lg focus:border-green-500 focus:outline-none transition-colors" 
+              />
+              <button 
+                className="h-14 px-8 rounded-xl bg-green-500 hover:bg-green-600 text-white font-semibold transition-colors shadow-md" 
+                onClick={() => { setPage(1); onSearch(); }}
+              >
+                검색
+              </button>
+            </div>
+            
+            {/* 내용 찾기 체크박스 */}
+            <div className="flex items-center gap-2 px-2">
+              <input 
+                type="checkbox" 
+                id="searchContent" 
+                checked={searchContent} 
+                onChange={(e) => setSearchContent(e.target.checked)}
+                className="w-4 h-4 text-green-500 border-zinc-300 rounded focus:ring-green-500" 
+              />
+              <label htmlFor="searchContent" className="text-sm font-medium text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
+                📄 내용 찾기 (Gemini AI 사용, 느리지만 정확함)
+              </label>
+            </div>
           </div>
         </div>
 
@@ -245,7 +262,7 @@ export default function SearchPage() {
                     const r = await fetch(`/api/docs/${id}?q=${encodeURIComponent(q)}`, { credentials: 'include' });
                     const payload = await r.json();
                     setSelected(payload);
-                  }} />
+                  }} searchContent={searchContent} query={q} />
                 )}
                 {data && (
                   <div className="flex items-center gap-3 mt-6 justify-center">
