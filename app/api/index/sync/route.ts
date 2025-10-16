@@ -115,10 +115,16 @@ export async function POST(req: Request) {
           indexed_at: Date.now()
         }));
 
-        // 🔥 중요: 기존 문서를 삭제하지 않고 upsert (중복 제거)
-        // 여러 사용자의 파일을 합치기 위해 항상 upsert 사용
-        console.log(`📂 Drive 문서 저장 시작 (기존 데이터 유지, upsert 방식)...`);
-        await bulkUpsertDocuments(docRecords);
+        // 전체 색인일 때는 기존 문서 삭제 후 재색인 (삭제된 문서 제거, 내 드라이브 제거)
+        // 추가 색인일 때는 기존 데이터 유지하며 추가
+        if (!incremental || !modifiedTimeAfter) {
+          console.log(`📂 Drive 전체 색인: 기존 문서 삭제 후 재색인...`);
+          await clearDocumentsByPlatform('drive');
+          await bulkUpsertDocuments(docRecords);
+        } else {
+          console.log(`📂 Drive 추가 색인: 기존 데이터 유지, 새 문서만 추가...`);
+          await bulkUpsertDocuments(docRecords);
+        }
         
         const count = await getDocumentCount('drive');
         
@@ -233,9 +239,16 @@ export async function POST(req: Request) {
             };
           });
 
-          // 🔥 중요: 기존 문서를 삭제하지 않고 upsert (중복 제거)
-          console.log(`🎨 Figma 문서 저장 시작 (기존 데이터 유지, upsert 방식)...`);
-          await bulkUpsertDocuments(docRecords);
+          // 전체 색인일 때는 기존 문서 삭제 후 재색인
+          // 추가 색인일 때는 기존 데이터 유지하며 추가
+          if (!incremental || !lastSyncTime) {
+            console.log(`🎨 Figma 전체 색인: 기존 문서 삭제 후 재색인...`);
+            await clearDocumentsByPlatform('figma');
+            await bulkUpsertDocuments(docRecords);
+          } else {
+            console.log(`🎨 Figma 추가 색인: 기존 데이터 유지, 새 문서만 추가...`);
+            await bulkUpsertDocuments(docRecords);
+          }
 
           const count = await getDocumentCount('figma');
           
@@ -326,10 +339,17 @@ export async function POST(req: Request) {
             };
           });
 
-          // 🔥 중요: 기존 문서를 삭제하지 않고 upsert (중복 제거)
-          console.log(`📋 Jira 이슈 저장 시작 (기존 데이터 유지, upsert 방식)...`);
+          // 전체 색인일 때는 기존 문서 삭제 후 재색인
+          // 추가 색인일 때는 기존 데이터 유지하며 추가
           if (docRecords.length > 0) {
-            await bulkUpsertDocuments(docRecords);
+            if (!incremental || !updatedAfter) {
+              console.log(`📋 Jira 전체 색인: 기존 이슈 삭제 후 재색인...`);
+              await clearDocumentsByPlatform('jira');
+              await bulkUpsertDocuments(docRecords);
+            } else {
+              console.log(`📋 Jira 추가 색인: 기존 데이터 유지, 새 이슈만 추가...`);
+              await bulkUpsertDocuments(docRecords);
+            }
           }
 
           const count = await getDocumentCount('jira');
