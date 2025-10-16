@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { bulkUpsertDocuments, setMetadata, getDocumentCount, clearDocumentsByPlatform, initSchema, type DocRecord, getMetadata } from '@/lib/db';
-import { driveSearchSharedDrivesEx, driveSearchSharedWithMeByText, driveSearchAggregate, driveSearchByFolderName, driveCrawlAllAccessibleFiles, driveResolvePaths, driveExportPlainText } from '@/lib/drive';
-import { figmaListProjectFiles, figmaListTeamProjects, figmaAutoDiscoverTeamProjectIds, figmaCollectTextNodes } from '@/lib/api';
+import { driveSearchSharedDrivesEx, driveSearchSharedWithMeByText, driveSearchAggregate, driveSearchByFolderName, driveCrawlAllAccessibleFiles, driveResolvePaths } from '@/lib/drive';
+import { figmaListProjectFiles, figmaListTeamProjects, figmaAutoDiscoverTeamProjectIds } from '@/lib/api';
 
 // 색인 동기화 API
 export async function POST(req: Request) {
@@ -96,53 +96,14 @@ export async function POST(req: Request) {
           return 'file';
         }
 
-        // 문서 내용 추출 (Google Docs, Sheets, Slides - 최신 150개)
-        const contentsMap = new Map<string, string>();
-        const extractableFiles = files
-          .filter((f: any) => 
-            f.mimeType === 'application/vnd.google-apps.document' ||
-            f.mimeType === 'application/vnd.google-apps.spreadsheet' ||
-            f.mimeType === 'application/vnd.google-apps.presentation'
-          )
-          .sort((a: any, b: any) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
-          .slice(0, 150);
-        
-        if (extractableFiles.length > 0) {
-          console.log(`📄 문서 내용 추출 시작 (최신 ${extractableFiles.length}개)...`);
-          
-          let extractedCount = 0;
-          
-          // 배치 처리 (10개씩 순차 처리 - Rate Limit 방지)
-          const BATCH_SIZE = 10;
-          for (let i = 0; i < extractableFiles.length; i += BATCH_SIZE) {
-            const batch = extractableFiles.slice(i, i + BATCH_SIZE);
-            const results = await Promise.allSettled(
-              batch.map((f: any) => 
-                driveExportPlainText(driveTokens, f.id, f.mimeType)
-                  .then(content => ({ id: f.id, content }))
-              )
-            );
-            
-            results.forEach((result) => {
-              if (result.status === 'fulfilled' && result.value.content && result.value.content.trim().length > 0) {
-                contentsMap.set(result.value.id, result.value.content.slice(0, 50000));
-                extractedCount++;
-              }
-            });
-            
-            console.log(`   📝 ${Math.min(i + BATCH_SIZE, extractableFiles.length)}/${extractableFiles.length} 처리 완료 (추출: ${extractedCount}개)`);
-          }
-          
-          console.log(`✅ 문서 내용 추출 완료: ${extractedCount}개`);
-        }
-
+        // DB에 저장할 형식으로 변환 (메타데이터만, 내용은 별도 API로 추출)
         const docRecords: DocRecord[] = files.map((f: any) => ({
           id: f.id,
           platform: 'drive',
           kind: mapMimeToKind(f.mimeType),
           title: f.name || 'Untitled',
           snippet: (f as any)._folderMatchedName ? `in ${(f as any)._folderMatchedName}` : f.mimeType,
-          content: contentsMap.get(f.id) || undefined, // 문서 전체 내용
+          content: undefined, // 내용은 /api/index/extract-content 에서 별도 추출
           url: f.webViewLink || '',
           path: (f as any)._resolvedPath ? `${(f as any)._resolvedPath} / ${f.name}` : ((f as any)._folderMatchedName ? `${(f as any)._folderMatchedName} / ${f.name}` : f.name),
           owner_id: f.owners?.[0]?.permissionId || 'unknown',
@@ -248,53 +209,15 @@ export async function POST(req: Request) {
             console.log(`🎨 Figma 파일 ${allFiles.length}개 수집 완료`);
           }
 
-          // Figma 텍스트 내용 추출 (최신 50개)
-          const figmaContentsMap = new Map<string, string>();
-          const filesToExtract = allFiles
-            .sort((a, b) => new Date(b.last_modified).getTime() - new Date(a.last_modified).getTime())
-            .slice(0, 50);
-          
-          if (filesToExtract.length > 0) {
-            console.log(`🎨 Figma 텍스트 추출 시작 (최신 ${filesToExtract.length}개)...`);
-            let extractedCount = 0;
-            
-            // 배치 처리 (5개씩 순차 처리 - Rate Limit 방지)
-            const BATCH_SIZE = 5;
-            for (let i = 0; i < filesToExtract.length; i += BATCH_SIZE) {
-              const batch = filesToExtract.slice(i, i + BATCH_SIZE);
-              const results = await Promise.allSettled(
-                batch.map(f => 
-                  figmaCollectTextNodes(f.key, figmaToken)
-                    .then(r => ({ key: f.key, texts: r.texts }))
-                )
-              );
-              
-              results.forEach((result) => {
-                if (result.status === 'fulfilled') {
-                  const texts = (result.value.texts || []).map((t: any) => t.text).join('\n');
-                  if (texts.trim().length > 0) {
-                    figmaContentsMap.set(result.value.key, texts.slice(0, 50000));
-                    extractedCount++;
-                  }
-                }
-              });
-              
-              console.log(`   🎨 ${Math.min(i + BATCH_SIZE, filesToExtract.length)}/${filesToExtract.length} 처리 완료 (추출: ${extractedCount}개)`);
-            }
-            
-            console.log(`✅ Figma 텍스트 추출 완료: ${extractedCount}개`);
-          }
-
-          // DB 저장 형식으로 변환
+          // DB 저장 형식으로 변환 (메타데이터만)
           const docRecords: DocRecord[] = allFiles.map((f) => {
-            const content = figmaContentsMap.get(f.key);
             return {
               id: f.key,
               platform: 'figma',
               kind: 'design',
               title: f.name || 'Untitled',
-              snippet: content ? content.slice(0, 200) : 'Figma design',
-              content: content || undefined,
+              snippet: 'Figma design',
+              content: undefined, // 내용은 /api/index/extract-content 에서 별도 추출
               url: `https://www.figma.com/file/${f.key}`,
               path: f.name,
               owner_id: 'figma',
