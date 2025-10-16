@@ -159,11 +159,14 @@ export async function POST(req: Request) {
           _recency: new Date(d.updatedAt).getTime()
         }));
 
-        // 2단계: Gemini 의미 검색 (결과가 부족하면)
-        // 복잡한 자연어 쿼리 감지: 5단어 이상 OR "~에 관한", "찾아줘" 같은 자연어 패턴
-        const isNaturalLanguage = q.split(/\s+/).length >= 5 || 
-                                  /[에관한|찾아|관련|대한|있는|있었]/.test(q);
-        const needSemanticSearch = filtered.length < 10 || isNaturalLanguage;
+        // 2단계: Gemini 의미 검색 (결과가 부족할 때만)
+        // 복잡한 자연어 쿼리 감지: 7단어 이상 OR 복잡한 문장 구조
+        const wordCount = q.split(/\s+/).length;
+        const hasComplexPattern = /[어떤|어느|어떻게|왜|언제|누가].*[있는|있었|하는|했던]/.test(q);
+        const isReallyComplex = wordCount >= 7 || hasComplexPattern;
+        
+        // Gemini는 결과가 부족하거나 정말 복잡한 쿼리일 때만
+        const needSemanticSearch = filtered.length < 5 || isReallyComplex;
         
         if (!fast && needSemanticSearch && (hasGemini() || hasOpenAI())) {
           debug.semanticReason = filtered.length < 10 ? 'insufficient_results' : 'natural_language_query';
