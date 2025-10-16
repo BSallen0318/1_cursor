@@ -159,13 +159,12 @@ export async function POST(req: Request) {
           _recency: new Date(d.updatedAt).getTime()
         }));
 
-        // 2단계: Gemini 의미 검색 (복잡한 쿼리에 활성화)
-        const wordCount = q.split(/\s+/).length;
-        const isComplexQuery = wordCount >= 5; // 5단어 이상이면 Gemini 사용
-        const needSemanticSearch = isComplexQuery || filtered.length < 10;
+        // 2단계: Gemini 의미 검색 (체크박스 활성화 시)
+        // fast=true (체크박스 안 함) → 메타데이터만 검색
+        // fast=false (체크박스 함) → Gemini 사용
         
-        if (!fast && needSemanticSearch && (hasGemini() || hasOpenAI())) {
-          debug.semanticReason = filtered.length < 10 ? 'insufficient_results' : 'natural_language_query';
+        if (!fast && (hasGemini() || hasOpenAI())) {
+          debug.semanticReason = 'content_search_enabled';
           try {
             const semanticStartTime = Date.now();
             const [qv] = await embedTexts([q]);
@@ -335,11 +334,11 @@ export async function POST(req: Request) {
             // 기존 filtered와 병합
             const mergedMap = new Map();
             for (const d of filtered) {
-              mergedMap.set(d.id, { ...d, _embedScore: (sims[d.id] || 0) * 100 });
+              mergedMap.set(d.id, { ...d, _embedScore: (sims[d.id] || 0) * 1000 });
             }
             for (const d of similarDocs) {
               if (!mergedMap.has(d.id)) {
-                mergedMap.set(d.id, { ...d, _embedScore: (sims[d.id] || 0) * 100 });
+                mergedMap.set(d.id, { ...d, _embedScore: (sims[d.id] || 0) * 1000 });
               }
             }
             
@@ -356,10 +355,10 @@ export async function POST(req: Request) {
 
         // 정렬: 의미 유사도 > 제목 매칭 > 내용 매칭 > 최신순
         filtered.sort((a: any, b: any) => {
-          // 의미 유사도가 있으면 우선
+          // 의미 유사도가 있으면 우선 (Gemini 사용 시)
           if (a._embedScore !== undefined && b._embedScore !== undefined) {
             const embedDiff = b._embedScore - a._embedScore;
-            if (Math.abs(embedDiff) > 5) return embedDiff;  // 5점 차이 이상이면 의미 유사도 우선
+            if (Math.abs(embedDiff) > 10) return embedDiff;  // 10점 차이 이상이면 의미 유사도 우선
           }
           const titleDiff = b._titleScore - a._titleScore;
           if (titleDiff !== 0) return titleDiff;
