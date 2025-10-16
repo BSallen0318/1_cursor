@@ -56,14 +56,10 @@ export async function POST(req: Request) {
           platform = src;
         }
 
-        // 검색어가 길면 (복잡한 쿼리) 더 많이 가져와서 Gemini로 필터링
-        const isComplexQuery = q.length > 10 || q.split(/\s+/).length > 2;
-        const searchLimit = isComplexQuery ? 300 : 100;
-        
-        // DB에서 검색 (매우 빠름!)
+        // 1단계: 빠른 키워드 검색 (전체 2623개 대상)
         const dbResults = await searchDocumentsSimple(q, {
           platform,
-          limit: searchLimit,
+          limit: 100,
           offset: 0
         });
 
@@ -163,8 +159,14 @@ export async function POST(req: Request) {
           _recency: new Date(d.updatedAt).getTime()
         }));
 
-        // Gemini 의미 검색 (복잡한 쿼리일 때)
-        if (!fast && isComplexQuery && (hasGemini() || hasOpenAI())) {
+        // 2단계: Gemini 의미 검색 (결과가 부족하면)
+        // 복잡한 자연어 쿼리 감지: 5단어 이상 OR "~에 관한", "찾아줘" 같은 자연어 패턴
+        const isNaturalLanguage = q.split(/\s+/).length >= 5 || 
+                                  /[에관한|찾아|관련|대한|있는|있었]/.test(q);
+        const needSemanticSearch = filtered.length < 10 || isNaturalLanguage;
+        
+        if (!fast && needSemanticSearch && (hasGemini() || hasOpenAI())) {
+          debug.semanticReason = filtered.length < 10 ? 'insufficient_results' : 'natural_language_query';
           try {
             const semanticStartTime = Date.now();
             const [qv] = await embedTexts([q]);
