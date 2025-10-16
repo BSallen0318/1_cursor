@@ -85,7 +85,12 @@ export default function SearchPage() {
         try { localStorage.setItem('recentSearches', JSON.stringify(next)); } catch {}
       }
     } catch (e: any) {
-      if (e?.name !== 'AbortError') setError(e?.message || '검색 실패');
+      if (e?.name === 'AbortError') {
+        // 취소된 경우: 에러 표시 안 함
+        console.log('검색 취소됨');
+      } else {
+        setError(e?.message || '검색 실패');
+      }
     } finally {
       setLoading(false);
       abortRef.current = null;
@@ -126,12 +131,23 @@ export default function SearchPage() {
                 placeholder="찾는 기획서에 관련된 정보를 입력해주세요" 
                 className="flex-1 border-2 border-zinc-200 dark:border-zinc-700 rounded-xl px-5 h-14 text-lg focus:border-green-500 focus:outline-none transition-colors" 
               />
-              <button 
-                className="h-14 px-8 rounded-xl bg-green-500 hover:bg-green-600 text-white font-semibold transition-colors shadow-md" 
-                onClick={() => { setPage(1); onSearch(); }}
-              >
-                검색
-              </button>
+            <button 
+              className={`h-14 px-8 rounded-xl font-semibold transition-colors shadow-md ${
+                loading 
+                  ? 'bg-red-500 hover:bg-red-600 text-white' 
+                  : 'bg-green-500 hover:bg-green-600 text-white'
+              }`}
+              onClick={() => { 
+                if (loading) {
+                  if (abortRef.current) abortRef.current.abort();
+                } else {
+                  setPage(1); 
+                  onSearch(); 
+                }
+              }}
+            >
+              {loading ? '취소' : '검색'}
+            </button>
             </div>
             
             {/* 내용 찾기 체크박스 */}

@@ -290,26 +290,15 @@ export async function POST(req: Request) {
               });
             }
             
-            // Gemini 입력: 제목 + content 핵심 부분
+            // Gemini 입력: 제목 + 전체 content (10000자까지)
             const texts = pool.map((d: any) => {
               const titlePart = d.title || '';
-              // content에서 키워드 주변 텍스트 추출
               let contentPart = '';
               if (d.content) {
-                // 각 키워드 주변 500자씩 추출
-                for (const kw of keywords) {
-                  const lowerContent = d.content.toLowerCase();
-                  const idx = lowerContent.indexOf(kw);
-                  if (idx >= 0) {
-                    const start = Math.max(0, idx - 250);
-                    const end = Math.min(d.content.length, idx + 250);
-                    contentPart += d.content.slice(start, end) + ' ';
-                  }
-                }
-                // 키워드 없으면 앞부분
-                if (!contentPart) contentPart = d.content.slice(0, 2000);
+                // 전체 content 사용 (10000자까지)
+                contentPart = d.content.slice(0, 10000);
               }
-              return `제목: ${titlePart}\n내용: ${contentPart.slice(0, 3000)}`.trim();
+              return `제목: ${titlePart}\n내용: ${contentPart}`.trim();
             });
             
             const evs = await embedTexts(texts);
@@ -319,8 +308,8 @@ export async function POST(req: Request) {
               sims[pool[i].id] = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
             }
             
-            // 의미 유사도로 필터링 (0.55 이상 - 더 포괄적으로)
-            const threshold = 0.55;
+            // 의미 유사도로 필터링 (0.65 이상 - 더 엄격하게)
+            const threshold = 0.65;
             const similarDocs = pool.filter((d: any) => (sims[d.id] || 0) >= threshold);
             debug.semanticThreshold = threshold;
             
