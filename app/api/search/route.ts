@@ -159,9 +159,10 @@ export async function POST(req: Request) {
           _recency: new Date(d.updatedAt).getTime()
         }));
 
-        // 2단계: Gemini 의미 검색 (정말 필요할 때만!)
-        // DB 검색으로 충분한 결과가 나오면 Gemini 건너뜀
-        const needSemanticSearch = false; // Gemini 비활성화 - DB 검색만 사용
+        // 2단계: Gemini 의미 검색 (복잡한 쿼리에 활성화)
+        const wordCount = q.split(/\s+/).length;
+        const isComplexQuery = wordCount >= 5; // 5단어 이상이면 Gemini 사용
+        const needSemanticSearch = isComplexQuery || filtered.length < 10;
         
         if (!fast && needSemanticSearch && (hasGemini() || hasOpenAI())) {
           debug.semanticReason = filtered.length < 10 ? 'insufficient_results' : 'natural_language_query';

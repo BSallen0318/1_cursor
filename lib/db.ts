@@ -260,62 +260,80 @@ export async function searchDocumentsSimple(query: string, options: {
     
     let result;
     
-    // 첫 번째 패턴으로 SQL 검색 (더 많이 가져옴)
-    const firstPattern = patterns[0];
+    // 모든 패턴으로 OR 검색 (넓게 가져옴)
+    // 첫 번째 패턴으로 기본 검색, 나머지는 추가로 검색
     
-    if (options.platform && options.kind) {
-      result = await sql`
-        SELECT * FROM documents
-        WHERE (
-          LOWER(title) LIKE ${firstPattern}
-          OR LOWER(snippet) LIKE ${firstPattern}
-          OR LOWER(content) LIKE ${firstPattern}
-          OR LOWER(path) LIKE ${firstPattern}
-        )
-        AND platform = ${options.platform}
-        AND kind = ${options.kind}
-        ORDER BY updated_at DESC
-        LIMIT ${limit * 2}
-      `;
-    } else if (options.platform) {
-      result = await sql`
-        SELECT * FROM documents
-        WHERE (
-          LOWER(title) LIKE ${firstPattern}
-          OR LOWER(snippet) LIKE ${firstPattern}
-          OR LOWER(content) LIKE ${firstPattern}
-          OR LOWER(path) LIKE ${firstPattern}
-        )
-        AND platform = ${options.platform}
-        ORDER BY updated_at DESC
-        LIMIT ${limit * 2}
-      `;
-    } else if (options.kind) {
-      result = await sql`
-        SELECT * FROM documents
-        WHERE (
-          LOWER(title) LIKE ${firstPattern}
-          OR LOWER(snippet) LIKE ${firstPattern}
-          OR LOWER(content) LIKE ${firstPattern}
-          OR LOWER(path) LIKE ${firstPattern}
-        )
-        AND kind = ${options.kind}
-        ORDER BY updated_at DESC
-        LIMIT ${limit * 2}
-      `;
-    } else {
-      result = await sql`
-        SELECT * FROM documents
-        WHERE (
-          LOWER(title) LIKE ${firstPattern}
-          OR LOWER(snippet) LIKE ${firstPattern}
-          OR LOWER(content) LIKE ${firstPattern}
-          OR LOWER(path) LIKE ${firstPattern}
-        )
-        ORDER BY updated_at DESC
-        LIMIT ${limit * 2}
-      `;
+    // 모든 키워드로 OR 검색 (각 키워드마다 별도 쿼리 후 병합)
+    const allResults: DocRecord[] = [];
+    const seenIds = new Set<string>();
+    
+    for (const pattern of patterns.slice(0, 5)) { // 최대 5개 키워드
+      let partialResult;
+      
+      if (options.platform && options.kind) {
+        partialResult = await sql`
+          SELECT * FROM documents
+          WHERE (
+            LOWER(title) LIKE ${pattern}
+            OR LOWER(snippet) LIKE ${pattern}
+            OR LOWER(content) LIKE ${pattern}
+            OR LOWER(path) LIKE ${pattern}
+          )
+          AND platform = ${options.platform}
+          AND kind = ${options.kind}
+          ORDER BY updated_at DESC
+          LIMIT 200
+        `;
+      } else if (options.platform) {
+        partialResult = await sql`
+          SELECT * FROM documents
+          WHERE (
+            LOWER(title) LIKE ${pattern}
+            OR LOWER(snippet) LIKE ${pattern}
+            OR LOWER(content) LIKE ${pattern}
+            OR LOWER(path) LIKE ${pattern}
+          )
+          AND platform = ${options.platform}
+          ORDER BY updated_at DESC
+          LIMIT 200
+        `;
+      } else if (options.kind) {
+        partialResult = await sql`
+          SELECT * FROM documents
+          WHERE (
+            LOWER(title) LIKE ${pattern}
+            OR LOWER(snippet) LIKE ${pattern}
+            OR LOWER(content) LIKE ${pattern}
+            OR LOWER(path) LIKE ${pattern}
+          )
+          AND kind = ${options.kind}
+          ORDER BY updated_at DESC
+          LIMIT 200
+        `;
+      } else {
+        partialResult = await sql`
+          SELECT * FROM documents
+          WHERE (
+            LOWER(title) LIKE ${pattern}
+            OR LOWER(snippet) LIKE ${pattern}
+            OR LOWER(content) LIKE ${pattern}
+            OR LOWER(path) LIKE ${pattern}
+          )
+          ORDER BY updated_at DESC
+          LIMIT 200
+        `;
+      }
+      
+      // 중복 제거하며 병합
+      for (const row of partialResult.rows) {
+        if (!seenIds.has(row.id)) {
+          seenIds.add(row.id);
+          allResults.push(row as DocRecord);
+        }
+      }
     }
+    
+    result = { rows: allResults };
     
     let rows = result.rows as DocRecord[];
     
