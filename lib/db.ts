@@ -283,7 +283,6 @@ export async function searchDocumentsSimple(query: string, options: {
           )
           AND platform = ${options.platform}
           AND kind = ${options.kind}
-          AND (platform != 'drive' OR drive_id IS NOT NULL)
         `;
       } else if (options.platform) {
         partialResult = await sql`
@@ -295,7 +294,6 @@ export async function searchDocumentsSimple(query: string, options: {
             OR LOWER(path) LIKE ${pattern}
           )
           AND platform = ${options.platform}
-          AND (platform != 'drive' OR drive_id IS NOT NULL)
         `;
       } else if (options.kind) {
         partialResult = await sql`
@@ -307,7 +305,6 @@ export async function searchDocumentsSimple(query: string, options: {
             OR LOWER(path) LIKE ${pattern}
           )
           AND kind = ${options.kind}
-          AND (platform != 'drive' OR drive_id IS NOT NULL)
         `;
       } else {
         partialResult = await sql`
@@ -318,7 +315,6 @@ export async function searchDocumentsSimple(query: string, options: {
             OR LOWER(content) LIKE ${pattern}
             OR LOWER(path) LIKE ${pattern}
           )
-          AND (platform != 'drive' OR drive_id IS NOT NULL)
         `;
       }
       
