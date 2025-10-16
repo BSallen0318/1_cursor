@@ -55,7 +55,7 @@ export default function SearchPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ q, page, size: 10, filters, sort: filters?.sort || 'relevance', fast: true }),
+        body: JSON.stringify({ q, page, size: 10, filters, sort: filters?.sort || 'relevance', fast: false }),
         signal: controller.signal
       });
       const text = await res.text();

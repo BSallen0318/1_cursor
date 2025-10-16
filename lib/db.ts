@@ -246,9 +246,18 @@ export async function searchDocumentsSimple(query: string, options: {
   offset?: number;
 }) {
   try {
-    const limit = options.limit || 100;
+    const limit = options.limit || 300; // 더 많이 가져와서 클라이언트에서 필터링
     const offset = options.offset || 0;
-    const pattern = `%${query.toLowerCase()}%`;
+    
+    // 검색어를 의미있는 단어로 분리
+    const keywords = query.toLowerCase()
+      .replace(/[가-힣]{1,2}(?=[가-힣]{2,}|$)/g, '') // 1-2글자 조사 제거
+      .split(/[\s,.;!?]+/) // 구분자로 분리
+      .filter(k => k.length > 2); // 2글자 이하 제외
+    
+    // 키워드가 있으면 각각으로 OR 검색, 없으면 원래 쿼리
+    const useKeywords = keywords.length > 0;
+    const pattern = useKeywords ? `%${keywords[0]}%` : `%${query.toLowerCase()}%`;
     
     let result;
     
@@ -306,7 +315,31 @@ export async function searchDocumentsSimple(query: string, options: {
       `;
     }
     
-    return result.rows as DocRecord[];
+    let rows = result.rows as DocRecord[];
+    
+    // 클라이언트 측에서 키워드 필터링 (추가 키워드들)
+    if (useKeywords && keywords.length > 1) {
+      // 나머지 키워드로 필터링
+      for (let i = 1; i < keywords.length; i++) {
+        const kw = keywords[i];
+        const filtered = rows.filter(doc => {
+          const text = `${doc.title} ${doc.snippet} ${doc.content} ${doc.path}`.toLowerCase();
+          return text.includes(kw);
+        });
+        if (filtered.length > 0) {
+          rows = [...rows, ...filtered];
+        }
+      }
+      
+      // 중복 제거
+      const uniqueMap = new Map();
+      for (const row of rows) {
+        uniqueMap.set(row.id, row);
+      }
+      rows = Array.from(uniqueMap.values());
+    }
+    
+    return rows.slice(0, options.limit || 100);
   } catch (error: any) {
     console.error('❌ 단순 검색 실패:', error);
     return [];

@@ -56,10 +56,14 @@ export async function POST(req: Request) {
           platform = src;
         }
 
+        // 검색어가 길면 (복잡한 쿼리) 더 많이 가져와서 Gemini로 필터링
+        const isComplexQuery = q.length > 10 || q.split(/\s+/).length > 2;
+        const searchLimit = isComplexQuery ? 300 : 100;
+        
         // DB에서 검색 (매우 빠름!)
         const dbResults = await searchDocumentsSimple(q, {
           platform,
-          limit: 100,  // 상위 100개만 가져오기
+          limit: searchLimit,
           offset: 0
         });
 
@@ -158,8 +162,49 @@ export async function POST(req: Request) {
           _recency: new Date(d.updatedAt).getTime()
         }));
 
-        // 정렬: 제목 매칭 > 내용 매칭 > 최신순
+        // Gemini 의미 검색 (복잡한 쿼리이고, 검색 결과가 많으면)
+        if (!fast && isComplexQuery && filtered.length > 10 && (hasGemini() || hasOpenAI())) {
+          try {
+            const semanticStartTime = Date.now();
+            const [qv] = await embedTexts([q]);
+            
+            // 상위 100개만 의미 유사도 계산
+            const pool = filtered.slice(0, 100);
+            const texts = pool.map((d) => {
+              const titlePart = d.title || '';
+              const snippetPart = d.snippet || '';
+              const contentPart = (d as any).content ? (d as any).content.slice(0, 500) : '';
+              return `${titlePart} ${snippetPart} ${contentPart}`.trim();
+            });
+            
+            const evs = await embedTexts(texts);
+            const sims: Record<string, number> = {};
+            for (let i = 0; i < pool.length; i++) {
+              const v = evs[i] || [];
+              sims[pool[i].id] = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
+            }
+            
+            // 의미 유사도 점수 추가
+            filtered = filtered.map((d: any) => ({
+              ...d,
+              _embedScore: (sims[d.id] || 0) * 100  // 0-100 스케일
+            }));
+            
+            debug.semanticApplied = true;
+            debug.semanticTime = Date.now() - semanticStartTime;
+            debug.semanticCount = Object.keys(sims).length;
+          } catch (e: any) {
+            debug.semanticError = e?.message;
+          }
+        }
+
+        // 정렬: 의미 유사도 > 제목 매칭 > 내용 매칭 > 최신순
         filtered.sort((a: any, b: any) => {
+          // 의미 유사도가 있으면 우선
+          if (a._embedScore !== undefined && b._embedScore !== undefined) {
+            const embedDiff = b._embedScore - a._embedScore;
+            if (Math.abs(embedDiff) > 5) return embedDiff;  // 5점 차이 이상이면 의미 유사도 우선
+          }
           const titleDiff = b._titleScore - a._titleScore;
           if (titleDiff !== 0) return titleDiff;
           const contentDiff = b._contentScore - a._contentScore;
