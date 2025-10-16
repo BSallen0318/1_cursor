@@ -292,7 +292,8 @@ export async function POST(req: Request) {
             const texts = pool.map((d: any) => {
               const titlePart = d.title || '';
               const snippetPart = d.snippet || '';
-              const contentPart = d.content ? d.content.slice(0, 500) : '';
+              // content를 더 많이 포함 (최대 5000자)
+              const contentPart = d.content ? d.content.slice(0, 5000) : '';
               return `${titlePart} ${snippetPart} ${contentPart}`.trim();
             });
             
@@ -303,8 +304,8 @@ export async function POST(req: Request) {
               sims[pool[i].id] = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
             }
             
-            // 의미 유사도로 필터링 (0.65 이상만 - 엄격하게)
-            const threshold = 0.65;
+            // 의미 유사도로 필터링 (0.55 이상 - 더 포괄적으로)
+            const threshold = 0.55;
             const similarDocs = pool.filter((d: any) => (sims[d.id] || 0) >= threshold);
             debug.semanticThreshold = threshold;
             

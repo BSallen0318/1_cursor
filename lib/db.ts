@@ -349,8 +349,13 @@ export async function searchDocumentsSimple(query: string, options: {
       
       for (const p of patterns) {
         const word = p.replace(/%/g, '');
+        // 제목 매칭
         if (title.includes(word)) score += 100;
-        if (content.includes(word)) score += 10;
+        // content 매칭 (단어 빈도 고려)
+        if (content.includes(word)) {
+          const count = (content.match(new RegExp(word, 'g')) || []).length;
+          score += Math.min(count * 5, 50); // 최대 50점
+        }
       }
       
       return { ...doc, _relevance: score };
