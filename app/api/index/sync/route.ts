@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { bulkUpsertDocuments, setMetadata, getDocumentCount, clearDocumentsByPlatform, initSchema, type DocRecord, getMetadata } from '@/lib/db';
-import { driveSearchSharedDrivesEx, driveSearchSharedWithMeByText, driveSearchAggregate, driveSearchByFolderName, driveCrawlAllAccessibleFiles, driveResolvePaths } from '@/lib/drive';
+import { driveSearchSharedDrivesEx, driveSearchSharedWithMeByText, driveSearchAggregate, driveSearchByFolderName, driveCrawlAllAccessibleFiles, driveResolvePaths, driveExportPlainText } from '@/lib/drive';
 import { figmaListProjectFiles, figmaListTeamProjects, figmaAutoDiscoverTeamProjectIds, figmaCollectTextNodes } from '@/lib/api';
 
 // 색인 동기화 API
@@ -96,12 +96,41 @@ export async function POST(req: Request) {
           return 'file';
         }
 
+        console.log(`📄 문서 내용 추출 시작 (상위 ${Math.min(files.length, 100)}개)...`);
+        
+        // 문서 내용 추출 (상위 100개만, 시간 제한)
+        const contentsMap = new Map<string, string>();
+        const filesToExtract = files.slice(0, 100); // 시간 고려해서 100개만
+        let extractedCount = 0;
+        
+        for (let i = 0; i < filesToExtract.length; i++) {
+          const f = filesToExtract[i];
+          try {
+            const content = await driveExportPlainText(driveTokens, f.id, f.mimeType);
+            if (content && content.trim().length > 0) {
+              // 최대 50KB까지만 저장 (DB 성능 고려)
+              contentsMap.set(f.id, content.slice(0, 50000));
+              extractedCount++;
+            }
+          } catch (e) {
+            // 오류는 무시하고 계속 진행
+          }
+          
+          // 진행률 표시 (10개마다)
+          if ((i + 1) % 10 === 0) {
+            console.log(`   📝 ${i + 1}/${filesToExtract.length} 문서 처리 완료 (추출됨: ${extractedCount}개)`);
+          }
+        }
+        
+        console.log(`✅ 문서 내용 추출 완료: ${extractedCount}/${filesToExtract.length}개`);
+
         const docRecords: DocRecord[] = files.map((f: any) => ({
           id: f.id,
           platform: 'drive',
           kind: mapMimeToKind(f.mimeType),
           title: f.name || 'Untitled',
           snippet: (f as any)._folderMatchedName ? `in ${(f as any)._folderMatchedName}` : f.mimeType,
+          content: contentsMap.get(f.id) || undefined, // 문서 전체 내용
           url: f.webViewLink || '',
           path: (f as any)._resolvedPath ? `${(f as any)._resolvedPath} / ${f.name}` : ((f as any)._folderMatchedName ? `${(f as any)._folderMatchedName} / ${f.name}` : f.name),
           owner_id: f.owners?.[0]?.permissionId || 'unknown',
@@ -207,21 +236,51 @@ export async function POST(req: Request) {
             console.log(`🎨 Figma 파일 ${allFiles.length}개 수집 완료`);
           }
 
+          // Figma 텍스트 내용 추출 (상위 50개만)
+          console.log(`🎨 Figma 텍스트 추출 시작 (상위 ${Math.min(allFiles.length, 50)}개)...`);
+          const figmaContentsMap = new Map<string, string>();
+          const filesToExtract = allFiles.slice(0, 50);
+          let extractedCount = 0;
+          
+          for (let i = 0; i < filesToExtract.length; i++) {
+            const f = filesToExtract[i];
+            try {
+              const r = await figmaCollectTextNodes(f.key, figmaToken);
+              const texts = (r.texts || []).map((t: any) => t.text).join('\n');
+              if (texts.trim().length > 0) {
+                figmaContentsMap.set(f.key, texts.slice(0, 50000));
+                extractedCount++;
+              }
+            } catch (e) {
+              // 오류는 무시
+            }
+            
+            if ((i + 1) % 10 === 0) {
+              console.log(`   🎨 ${i + 1}/${filesToExtract.length} 파일 처리 완료 (추출됨: ${extractedCount}개)`);
+            }
+          }
+          
+          console.log(`✅ Figma 텍스트 추출 완료: ${extractedCount}/${filesToExtract.length}개`);
+
           // DB 저장 형식으로 변환
-          const docRecords: DocRecord[] = allFiles.map((f) => ({
-            id: f.key,
-            platform: 'figma',
-            kind: 'design',
-            title: f.name || 'Untitled',
-            snippet: 'Figma design',
-            url: `https://www.figma.com/file/${f.key}`,
-            path: f.name,
-            owner_id: 'figma',
-            owner_name: 'Figma',
-            owner_email: '',
-            updated_at: f.last_modified || new Date().toISOString(),
-            indexed_at: Date.now()
-          }));
+          const docRecords: DocRecord[] = allFiles.map((f) => {
+            const content = figmaContentsMap.get(f.key);
+            return {
+              id: f.key,
+              platform: 'figma',
+              kind: 'design',
+              title: f.name || 'Untitled',
+              snippet: content ? content.slice(0, 200) : 'Figma design',
+              content: content || undefined,
+              url: `https://www.figma.com/file/${f.key}`,
+              path: f.name,
+              owner_id: 'figma',
+              owner_name: 'Figma',
+              owner_email: '',
+              updated_at: f.last_modified || new Date().toISOString(),
+              indexed_at: Date.now()
+            };
+          });
 
           // 전체 색인일 때만 기존 문서 삭제
           if (!incremental || !lastSyncTime) {
@@ -294,12 +353,14 @@ export async function POST(req: Request) {
           // DB 저장 형식으로 변환
           const docRecords: DocRecord[] = allIssues.map((issue) => {
             const description = extractTextFromJiraDescription(issue.fields.description);
+            // Jira는 description을 content로, 요약을 snippet으로 저장
             return {
               id: issue.key,
               platform: 'jira',
               kind: 'issue',
               title: issue.fields.summary || 'Untitled Issue',
-              snippet: description.slice(0, 500) || issue.fields.status?.name || '',
+              snippet: description.slice(0, 200) || issue.fields.status?.name || '',
+              content: description.slice(0, 50000) || undefined,
               url: `https://${credentials.domain}/browse/${issue.key}`,
               path: `${issue.fields.project?.key || 'JIRA'} / ${issue.key}`,
               owner_id: issue.fields.assignee?.accountId || issue.fields.reporter?.displayName || 'unknown',

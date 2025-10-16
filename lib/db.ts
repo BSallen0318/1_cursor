@@ -6,6 +6,7 @@ export interface DocRecord {
   kind?: string;
   title: string;
   snippet?: string;
+  content?: string;  // 문서 전체 내용
   url?: string;
   path?: string;
   owner_id?: string;
@@ -28,6 +29,7 @@ export async function initSchema() {
         kind TEXT,
         title TEXT NOT NULL,
         snippet TEXT,
+        content TEXT,
         url TEXT,
         path TEXT,
         owner_id TEXT,
@@ -41,11 +43,45 @@ export async function initSchema() {
           to_tsvector('simple', 
             coalesce(title, '') || ' ' || 
             coalesce(snippet, '') || ' ' || 
+            coalesce(content, '') || ' ' || 
             coalesce(path, '')
           )
         ) STORED
       )
     `;
+
+    // 기존 테이블에 content 컬럼이 없으면 추가 (마이그레이션)
+    try {
+      await sql`ALTER TABLE documents ADD COLUMN IF NOT EXISTS content TEXT`;
+      console.log('✅ content 컬럼 마이그레이션 완료');
+    } catch (e: any) {
+      // 이미 존재하면 무시
+      if (!e?.message?.includes('already exists')) {
+        console.log('⚠️ content 컬럼 추가 실패 (이미 존재할 수 있음):', e?.message);
+      }
+    }
+
+    // search_vector 재생성 (content 포함)
+    try {
+      await sql`
+        ALTER TABLE documents 
+        DROP COLUMN IF EXISTS search_vector CASCADE
+      `;
+      await sql`
+        ALTER TABLE documents 
+        ADD COLUMN search_vector tsvector GENERATED ALWAYS AS (
+          to_tsvector('simple', 
+            coalesce(title, '') || ' ' || 
+            coalesce(snippet, '') || ' ' || 
+            coalesce(content, '') || ' ' || 
+            coalesce(path, '')
+          )
+        ) STORED
+      `;
+      console.log('✅ search_vector 재생성 완료');
+    } catch (e: any) {
+      console.log('⚠️ search_vector 재생성 실패:', e?.message);
+    }
 
     // 검색 최적화를 위한 인덱스
     await sql`CREATE INDEX IF NOT EXISTS idx_platform ON documents(platform)`;
@@ -77,7 +113,7 @@ export async function upsertDocument(doc: DocRecord) {
   try {
     await sql`
       INSERT INTO documents (
-        id, platform, kind, title, snippet, url, path,
+        id, platform, kind, title, snippet, content, url, path,
         owner_id, owner_name, owner_email, updated_at,
         mime_type, drive_id, indexed_at
       ) VALUES (
@@ -86,6 +122,7 @@ export async function upsertDocument(doc: DocRecord) {
         ${doc.kind || null},
         ${doc.title},
         ${doc.snippet || null},
+        ${doc.content || null},
         ${doc.url || null},
         ${doc.path || null},
         ${doc.owner_id || null},
@@ -101,6 +138,7 @@ export async function upsertDocument(doc: DocRecord) {
         kind = EXCLUDED.kind,
         title = EXCLUDED.title,
         snippet = EXCLUDED.snippet,
+        content = EXCLUDED.content,
         url = EXCLUDED.url,
         path = EXCLUDED.path,
         owner_id = EXCLUDED.owner_id,
@@ -220,6 +258,7 @@ export async function searchDocumentsSimple(query: string, options: {
         WHERE (
           LOWER(title) LIKE ${pattern}
           OR LOWER(snippet) LIKE ${pattern}
+          OR LOWER(content) LIKE ${pattern}
           OR LOWER(path) LIKE ${pattern}
         )
         AND platform = ${options.platform}
@@ -233,6 +272,7 @@ export async function searchDocumentsSimple(query: string, options: {
         WHERE (
           LOWER(title) LIKE ${pattern}
           OR LOWER(snippet) LIKE ${pattern}
+          OR LOWER(content) LIKE ${pattern}
           OR LOWER(path) LIKE ${pattern}
         )
         AND platform = ${options.platform}
@@ -245,6 +285,7 @@ export async function searchDocumentsSimple(query: string, options: {
         WHERE (
           LOWER(title) LIKE ${pattern}
           OR LOWER(snippet) LIKE ${pattern}
+          OR LOWER(content) LIKE ${pattern}
           OR LOWER(path) LIKE ${pattern}
         )
         AND kind = ${options.kind}
@@ -257,6 +298,7 @@ export async function searchDocumentsSimple(query: string, options: {
         WHERE (
           LOWER(title) LIKE ${pattern}
           OR LOWER(snippet) LIKE ${pattern}
+          OR LOWER(content) LIKE ${pattern}
           OR LOWER(path) LIKE ${pattern}
         )
         ORDER BY updated_at DESC

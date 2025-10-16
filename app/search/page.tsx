@@ -175,7 +175,7 @@ export default function SearchPage() {
           <div className="flex items-center gap-3">
             <span className="text-xl">📢</span>
             <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              찾아야 할 문서를 검색창에 입력해주세요. 자신이 볼 수 없는 권한의 문서는 미리보기 되지 않습니다. 그 외에 개선사항은 와니에게만 연락 주세요.
+              💡 <strong>전문 검색 지원:</strong> 문서 제목뿐만 아니라 <strong>문서 내용</strong>까지 검색합니다. 찾아야 할 문서의 특정 내용을 입력해보세요! | 자신이 볼 수 없는 권한의 문서는 미리보기 되지 않습니다. | 개선사항은 와니에게만 연락 주세요.
             </span>
           </div>
         </div>

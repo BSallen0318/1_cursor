@@ -69,24 +69,43 @@ export async function POST(req: Request) {
         debug.totalIndexed = totalCount;
 
         // DocRecord → DocItem 변환
-        const items: DocItem[] = dbResults.map((doc: DocRecord) => ({
-          id: doc.id,
-          platform: doc.platform as Platform,
-          kind: (doc.kind || 'file') as DocKind,
-          title: doc.title,
-          snippet: doc.snippet || '',
-          url: doc.url || '',
-          path: doc.path || doc.title,
-          owner: {
-            id: doc.owner_id || 'unknown',
-            name: doc.owner_name || 'unknown',
-            email: doc.owner_email || '',
-            role: 'member' as const
-          },
-          updatedAt: doc.updated_at || new Date().toISOString(),
-          tags: [doc.platform],
-          score: 1
-        }));
+        const items: DocItem[] = dbResults.map((doc: DocRecord) => {
+          // content가 있으면 검색어 주변 텍스트를 snippet으로 사용
+          let snippet = doc.snippet || '';
+          if (doc.content && q) {
+            const lowerContent = doc.content.toLowerCase();
+            const lowerQuery = q.toLowerCase();
+            const index = lowerContent.indexOf(lowerQuery);
+            if (index >= 0) {
+              // 검색어 주변 200자를 snippet으로
+              const start = Math.max(0, index - 100);
+              const end = Math.min(doc.content.length, index + lowerQuery.length + 100);
+              snippet = (start > 0 ? '...' : '') + doc.content.slice(start, end) + (end < doc.content.length ? '...' : '');
+            } else {
+              // 검색어가 없으면 content 앞부분을 사용
+              snippet = doc.content.slice(0, 200) + (doc.content.length > 200 ? '...' : '');
+            }
+          }
+          
+          return {
+            id: doc.id,
+            platform: doc.platform as Platform,
+            kind: (doc.kind || 'file') as DocKind,
+            title: doc.title,
+            snippet,
+            url: doc.url || '',
+            path: doc.path || doc.title,
+            owner: {
+              id: doc.owner_id || 'unknown',
+              name: doc.owner_name || 'unknown',
+              email: doc.owner_email || '',
+              role: 'member' as const
+            },
+            updatedAt: doc.updated_at || new Date().toISOString(),
+            tags: [doc.platform],
+            score: 1
+          };
+        });
 
         // 필터 적용
         let filtered = items;
