@@ -159,14 +159,9 @@ export async function POST(req: Request) {
           _recency: new Date(d.updatedAt).getTime()
         }));
 
-        // 2단계: Gemini 의미 검색 (결과가 부족할 때만)
-        // 복잡한 자연어 쿼리 감지: 7단어 이상 OR 복잡한 문장 구조
-        const wordCount = q.split(/\s+/).length;
-        const hasComplexPattern = /[어떤|어느|어떻게|왜|언제|누가].*[있는|있었|하는|했던]/.test(q);
-        const isReallyComplex = wordCount >= 7 || hasComplexPattern;
-        
-        // Gemini는 결과가 부족하거나 정말 복잡한 쿼리일 때만
-        const needSemanticSearch = filtered.length < 5 || isReallyComplex;
+        // 2단계: Gemini 의미 검색 (정말 필요할 때만!)
+        // DB 검색으로 충분한 결과가 나오면 Gemini 건너뜀
+        const needSemanticSearch = false; // Gemini 비활성화 - DB 검색만 사용
         
         if (!fast && needSemanticSearch && (hasGemini() || hasOpenAI())) {
           debug.semanticReason = filtered.length < 10 ? 'insufficient_results' : 'natural_language_query';

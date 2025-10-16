@@ -249,95 +249,105 @@ export async function searchDocumentsSimple(query: string, options: {
     const limit = options.limit || 300; // 더 많이 가져와서 클라이언트에서 필터링
     const offset = options.offset || 0;
     
-    // 검색어를 의미있는 단어로 분리
-    const keywords = query.toLowerCase()
-      .replace(/[가-힣]{1,2}(?=[가-힣]{2,}|$)/g, '') // 1-2글자 조사 제거
-      .split(/[\s,.;!?]+/) // 구분자로 분리
-      .filter(k => k.length > 2); // 2글자 이하 제외
+    // 검색어를 단어로 분리
+    const words = query.toLowerCase()
+      .split(/[\s,.\-_]+/)
+      .map(w => w.replace(/[을를이가에서와과는도한]$/g, '')) // 조사 제거
+      .filter(w => w.length >= 2); // 2글자 이상만
     
-    // 키워드가 있으면 각각으로 OR 검색, 없으면 원래 쿼리
-    const useKeywords = keywords.length > 0;
-    const pattern = useKeywords ? `%${keywords[0]}%` : `%${query.toLowerCase()}%`;
+    // 각 단어를 개별 패턴으로
+    const patterns = words.length > 0 ? words.map(w => `%${w}%`) : [`%${query.toLowerCase()}%`];
     
     let result;
+    
+    // 첫 번째 패턴으로 SQL 검색 (더 많이 가져옴)
+    const firstPattern = patterns[0];
     
     if (options.platform && options.kind) {
       result = await sql`
         SELECT * FROM documents
         WHERE (
-          LOWER(title) LIKE ${pattern}
-          OR LOWER(snippet) LIKE ${pattern}
-          OR LOWER(content) LIKE ${pattern}
-          OR LOWER(path) LIKE ${pattern}
+          LOWER(title) LIKE ${firstPattern}
+          OR LOWER(snippet) LIKE ${firstPattern}
+          OR LOWER(content) LIKE ${firstPattern}
+          OR LOWER(path) LIKE ${firstPattern}
         )
         AND platform = ${options.platform}
         AND kind = ${options.kind}
         ORDER BY updated_at DESC
-        LIMIT ${limit} OFFSET ${offset}
+        LIMIT ${limit * 2}
       `;
     } else if (options.platform) {
       result = await sql`
         SELECT * FROM documents
         WHERE (
-          LOWER(title) LIKE ${pattern}
-          OR LOWER(snippet) LIKE ${pattern}
-          OR LOWER(content) LIKE ${pattern}
-          OR LOWER(path) LIKE ${pattern}
+          LOWER(title) LIKE ${firstPattern}
+          OR LOWER(snippet) LIKE ${firstPattern}
+          OR LOWER(content) LIKE ${firstPattern}
+          OR LOWER(path) LIKE ${firstPattern}
         )
         AND platform = ${options.platform}
         ORDER BY updated_at DESC
-        LIMIT ${limit} OFFSET ${offset}
+        LIMIT ${limit * 2}
       `;
     } else if (options.kind) {
       result = await sql`
         SELECT * FROM documents
         WHERE (
-          LOWER(title) LIKE ${pattern}
-          OR LOWER(snippet) LIKE ${pattern}
-          OR LOWER(content) LIKE ${pattern}
-          OR LOWER(path) LIKE ${pattern}
+          LOWER(title) LIKE ${firstPattern}
+          OR LOWER(snippet) LIKE ${firstPattern}
+          OR LOWER(content) LIKE ${firstPattern}
+          OR LOWER(path) LIKE ${firstPattern}
         )
         AND kind = ${options.kind}
         ORDER BY updated_at DESC
-        LIMIT ${limit} OFFSET ${offset}
+        LIMIT ${limit * 2}
       `;
     } else {
       result = await sql`
         SELECT * FROM documents
         WHERE (
-          LOWER(title) LIKE ${pattern}
-          OR LOWER(snippet) LIKE ${pattern}
-          OR LOWER(content) LIKE ${pattern}
-          OR LOWER(path) LIKE ${pattern}
+          LOWER(title) LIKE ${firstPattern}
+          OR LOWER(snippet) LIKE ${firstPattern}
+          OR LOWER(content) LIKE ${firstPattern}
+          OR LOWER(path) LIKE ${firstPattern}
         )
         ORDER BY updated_at DESC
-        LIMIT ${limit} OFFSET ${offset}
+        LIMIT ${limit * 2}
       `;
     }
     
     let rows = result.rows as DocRecord[];
     
-    // 클라이언트 측에서 키워드 필터링 (추가 키워드들)
-    if (useKeywords && keywords.length > 1) {
-      // 나머지 키워드로 필터링
-      for (let i = 1; i < keywords.length; i++) {
-        const kw = keywords[i];
-        const filtered = rows.filter(doc => {
-          const text = `${doc.title} ${doc.snippet} ${doc.content} ${doc.path}`.toLowerCase();
-          return text.includes(kw);
+    // 나머지 패턴으로 메모리에서 필터링
+    if (patterns.length > 1) {
+      rows = rows.filter(doc => {
+        const text = `${doc.title} ${doc.snippet || ''} ${doc.content || ''} ${doc.path || ''}`.toLowerCase();
+        // 모든 단어가 포함되어야 함
+        return patterns.every(p => {
+          const word = p.replace(/%/g, '');
+          return text.includes(word);
         });
-        if (filtered.length > 0) {
-          rows = [...rows, ...filtered];
-        }
+      });
+    }
+    
+    // 관련도 점수 계산
+    rows = rows.map(doc => {
+      let score = 0;
+      const title = doc.title.toLowerCase();
+      const content = (doc.content || '').toLowerCase();
+      
+      for (const p of patterns) {
+        const word = p.replace(/%/g, '');
+        if (title.includes(word)) score += 100;
+        if (content.includes(word)) score += 10;
       }
       
-      // 중복 제거
-      const uniqueMap = new Map();
-      for (const row of rows) {
-        uniqueMap.set(row.id, row);
-      }
-      rows = Array.from(uniqueMap.values());
-    }
+      return { ...doc, _relevance: score };
+    });
+    
+    // 관련도 순으로 정렬
+    rows.sort((a: any, b: any) => (b._relevance || 0) - (a._relevance || 0));
     
     return rows.slice(0, options.limit || 100);
   } catch (error: any) {
