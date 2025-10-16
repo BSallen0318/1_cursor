@@ -115,11 +115,9 @@ export async function POST(req: Request) {
           indexed_at: Date.now()
         }));
 
-        // 전체 색인일 때만 기존 문서 삭제
-        if (!incremental || !modifiedTimeAfter) {
-          await clearDocumentsByPlatform('drive');
-          console.log('📂 기존 Drive 문서 삭제 완료');
-        }
+        // 🔥 중요: 기존 문서를 삭제하지 않고 upsert (중복 제거)
+        // 여러 사용자의 파일을 합치기 위해 항상 upsert 사용
+        console.log(`📂 Drive 문서 저장 시작 (기존 데이터 유지, upsert 방식)...`);
         await bulkUpsertDocuments(docRecords);
         
         const count = await getDocumentCount('drive');
@@ -228,11 +226,8 @@ export async function POST(req: Request) {
             };
           });
 
-          // 전체 색인일 때만 기존 문서 삭제
-          if (!incremental || !lastSyncTime) {
-            await clearDocumentsByPlatform('figma');
-            console.log('🎨 기존 Figma 문서 삭제 완료');
-          }
+          // 🔥 중요: 기존 문서를 삭제하지 않고 upsert (중복 제거)
+          console.log(`🎨 Figma 문서 저장 시작 (기존 데이터 유지, upsert 방식)...`);
           await bulkUpsertDocuments(docRecords);
 
           const count = await getDocumentCount('figma');
@@ -317,11 +312,8 @@ export async function POST(req: Request) {
             };
           });
 
-          // 전체 색인일 때만 기존 문서 삭제
-          if (!incremental || !updatedAfter) {
-            await clearDocumentsByPlatform('jira');
-            console.log('📋 기존 Jira 문서 삭제 완료');
-          }
+          // 🔥 중요: 기존 문서를 삭제하지 않고 upsert (중복 제거)
+          console.log(`📋 Jira 이슈 저장 시작 (기존 데이터 유지, upsert 방식)...`);
           if (docRecords.length > 0) {
             await bulkUpsertDocuments(docRecords);
           }
