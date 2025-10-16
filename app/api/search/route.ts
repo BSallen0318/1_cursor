@@ -255,17 +255,10 @@ export async function POST(req: Request) {
                 }
               }
               
-              // Gemini 처리: 키워드 관련도 높은 상위 문서만 (Vercel 60초 제한)
-              // 하지만 DB 검색은 모든 문서 대상
-              const maxGeminiDocs = 150; // 약 60-90초 소요
-              if (allDocs.length > maxGeminiDocs) {
-                debug.semanticPoolLimited = true;
-                debug.semanticTotalFound = allDocs.length;
-                allDocs = allDocs.slice(0, maxGeminiDocs); // 키워드 점수 높은 순
-              } else {
-                debug.semanticPoolLimited = false;
-              }
+              // Gemini 처리: 모든 키워드 매칭 문서 (제한 없음)
+              // 실제로 2-3분 timeout 발생하지 않음
               debug.semanticPoolSize = allDocs.length;
+              debug.semanticPoolLimited = false;
               pool = allDocs.map((doc: DocRecord) => {
                 let snippet = doc.snippet || '';
                 if (doc.content) {
