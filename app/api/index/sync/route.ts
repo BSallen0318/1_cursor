@@ -96,34 +96,36 @@ export async function POST(req: Request) {
           return 'file';
         }
 
-        console.log(`📄 문서 내용 추출 시작 (상위 ${Math.min(files.length, 20)}개)...`);
+        console.log(`📄 문서 내용 추출 시작 (상위 ${Math.min(files.length, 50)}개)...`);
         
-        // 문서 내용 추출 (Vercel 시간 제한 고려하여 20개만)
+        // 문서 내용 추출 (Google Docs, Sheets, Slides만 - 상위 50개)
         const contentsMap = new Map<string, string>();
-        const filesToExtract = files.slice(0, 20); // Vercel 타임아웃 방지
+        const extractableFiles = files.filter((f: any) => 
+          f.mimeType === 'application/vnd.google-apps.document' ||
+          f.mimeType === 'application/vnd.google-apps.spreadsheet' ||
+          f.mimeType === 'application/vnd.google-apps.presentation'
+        ).slice(0, 50);
+        
         let extractedCount = 0;
         
-        // 병렬 처리로 속도 향상 (최대 5개씩)
-        const BATCH_SIZE = 5;
-        for (let i = 0; i < filesToExtract.length; i += BATCH_SIZE) {
-          const batch = filesToExtract.slice(i, i + BATCH_SIZE);
-          const results = await Promise.allSettled(
-            batch.map(f => driveExportPlainText(driveTokens, f.id, f.mimeType))
-          );
-          
-          results.forEach((result, idx) => {
-            if (result.status === 'fulfilled' && result.value && result.value.trim().length > 0) {
-              const f = batch[idx];
-              // 최대 20KB까지만 저장 (DB 성능 고려)
-              contentsMap.set(f.id, result.value.slice(0, 20000));
-              extractedCount++;
-            }
-          });
-          
-          console.log(`   📝 ${Math.min(i + BATCH_SIZE, filesToExtract.length)}/${filesToExtract.length} 문서 처리 완료 (추출됨: ${extractedCount}개)`);
-        }
+        // 모두 병렬 처리로 빠르게 (Promise.allSettled)
+        console.log(`   📝 ${extractableFiles.length}개 문서 병렬 추출 중...`);
+        const results = await Promise.allSettled(
+          extractableFiles.map((f: any) => 
+            driveExportPlainText(driveTokens, f.id, f.mimeType)
+              .then(content => ({ id: f.id, content }))
+          )
+        );
         
-        console.log(`✅ 문서 내용 추출 완료: ${extractedCount}/${filesToExtract.length}개`);
+        results.forEach((result) => {
+          if (result.status === 'fulfilled' && result.value.content && result.value.content.trim().length > 0) {
+            // 최대 30KB까지 저장
+            contentsMap.set(result.value.id, result.value.content.slice(0, 30000));
+            extractedCount++;
+          }
+        });
+        
+        console.log(`✅ 문서 내용 추출 완료: ${extractedCount}/${extractableFiles.length}개`);
 
         const docRecords: DocRecord[] = files.map((f: any) => ({
           id: f.id,
@@ -237,33 +239,30 @@ export async function POST(req: Request) {
             console.log(`🎨 Figma 파일 ${allFiles.length}개 수집 완료`);
           }
 
-          // Figma 텍스트 내용 추출 (Vercel 타임아웃 고려하여 10개만)
-          console.log(`🎨 Figma 텍스트 추출 시작 (상위 ${Math.min(allFiles.length, 10)}개)...`);
+          // Figma 텍스트 내용 추출 (상위 30개, 병렬 처리)
+          console.log(`🎨 Figma 텍스트 추출 시작 (상위 ${Math.min(allFiles.length, 30)}개)...`);
           const figmaContentsMap = new Map<string, string>();
-          const filesToExtract = allFiles.slice(0, 10);
+          const filesToExtract = allFiles.slice(0, 30);
           let extractedCount = 0;
           
-          // 병렬 처리 (최대 3개씩)
-          const BATCH_SIZE = 3;
-          for (let i = 0; i < filesToExtract.length; i += BATCH_SIZE) {
-            const batch = filesToExtract.slice(i, i + BATCH_SIZE);
-            const results = await Promise.allSettled(
-              batch.map(f => figmaCollectTextNodes(f.key, figmaToken))
-            );
-            
-            results.forEach((result, idx) => {
-              if (result.status === 'fulfilled') {
-                const f = batch[idx];
-                const texts = (result.value.texts || []).map((t: any) => t.text).join('\n');
-                if (texts.trim().length > 0) {
-                  figmaContentsMap.set(f.key, texts.slice(0, 20000));
-                  extractedCount++;
-                }
+          // 모두 병렬 처리
+          console.log(`   🎨 ${filesToExtract.length}개 파일 병렬 추출 중...`);
+          const results = await Promise.allSettled(
+            filesToExtract.map(f => 
+              figmaCollectTextNodes(f.key, figmaToken)
+                .then(r => ({ key: f.key, texts: r.texts }))
+            )
+          );
+          
+          results.forEach((result) => {
+            if (result.status === 'fulfilled') {
+              const texts = (result.value.texts || []).map((t: any) => t.text).join('\n');
+              if (texts.trim().length > 0) {
+                figmaContentsMap.set(result.value.key, texts.slice(0, 30000));
+                extractedCount++;
               }
-            });
-            
-            console.log(`   🎨 ${Math.min(i + BATCH_SIZE, filesToExtract.length)}/${filesToExtract.length} 파일 처리 완료 (추출됨: ${extractedCount}개)`);
-          }
+            }
+          });
           
           console.log(`✅ Figma 텍스트 추출 완료: ${extractedCount}/${filesToExtract.length}개`);
 
@@ -365,7 +364,7 @@ export async function POST(req: Request) {
               kind: 'issue',
               title: issue.fields.summary || 'Untitled Issue',
               snippet: description.slice(0, 200) || issue.fields.status?.name || '',
-              content: description.slice(0, 20000) || undefined,
+              content: description.slice(0, 30000) || undefined,
               url: `https://${credentials.domain}/browse/${issue.key}`,
               path: `${issue.fields.project?.key || 'JIRA'} / ${issue.key}`,
               owner_id: issue.fields.assignee?.accountId || issue.fields.reporter?.displayName || 'unknown',
