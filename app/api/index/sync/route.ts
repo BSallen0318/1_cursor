@@ -96,30 +96,31 @@ export async function POST(req: Request) {
           return 'file';
         }
 
-        console.log(`📄 문서 내용 추출 시작 (상위 ${Math.min(files.length, 100)}개)...`);
+        console.log(`📄 문서 내용 추출 시작 (상위 ${Math.min(files.length, 20)}개)...`);
         
-        // 문서 내용 추출 (상위 100개만, 시간 제한)
+        // 문서 내용 추출 (Vercel 시간 제한 고려하여 20개만)
         const contentsMap = new Map<string, string>();
-        const filesToExtract = files.slice(0, 100); // 시간 고려해서 100개만
+        const filesToExtract = files.slice(0, 20); // Vercel 타임아웃 방지
         let extractedCount = 0;
         
-        for (let i = 0; i < filesToExtract.length; i++) {
-          const f = filesToExtract[i];
-          try {
-            const content = await driveExportPlainText(driveTokens, f.id, f.mimeType);
-            if (content && content.trim().length > 0) {
-              // 최대 50KB까지만 저장 (DB 성능 고려)
-              contentsMap.set(f.id, content.slice(0, 50000));
+        // 병렬 처리로 속도 향상 (최대 5개씩)
+        const BATCH_SIZE = 5;
+        for (let i = 0; i < filesToExtract.length; i += BATCH_SIZE) {
+          const batch = filesToExtract.slice(i, i + BATCH_SIZE);
+          const results = await Promise.allSettled(
+            batch.map(f => driveExportPlainText(driveTokens, f.id, f.mimeType))
+          );
+          
+          results.forEach((result, idx) => {
+            if (result.status === 'fulfilled' && result.value && result.value.trim().length > 0) {
+              const f = batch[idx];
+              // 최대 20KB까지만 저장 (DB 성능 고려)
+              contentsMap.set(f.id, result.value.slice(0, 20000));
               extractedCount++;
             }
-          } catch (e) {
-            // 오류는 무시하고 계속 진행
-          }
+          });
           
-          // 진행률 표시 (10개마다)
-          if ((i + 1) % 10 === 0) {
-            console.log(`   📝 ${i + 1}/${filesToExtract.length} 문서 처리 완료 (추출됨: ${extractedCount}개)`);
-          }
+          console.log(`   📝 ${Math.min(i + BATCH_SIZE, filesToExtract.length)}/${filesToExtract.length} 문서 처리 완료 (추출됨: ${extractedCount}개)`);
         }
         
         console.log(`✅ 문서 내용 추출 완료: ${extractedCount}/${filesToExtract.length}개`);
@@ -236,28 +237,32 @@ export async function POST(req: Request) {
             console.log(`🎨 Figma 파일 ${allFiles.length}개 수집 완료`);
           }
 
-          // Figma 텍스트 내용 추출 (상위 50개만)
-          console.log(`🎨 Figma 텍스트 추출 시작 (상위 ${Math.min(allFiles.length, 50)}개)...`);
+          // Figma 텍스트 내용 추출 (Vercel 타임아웃 고려하여 10개만)
+          console.log(`🎨 Figma 텍스트 추출 시작 (상위 ${Math.min(allFiles.length, 10)}개)...`);
           const figmaContentsMap = new Map<string, string>();
-          const filesToExtract = allFiles.slice(0, 50);
+          const filesToExtract = allFiles.slice(0, 10);
           let extractedCount = 0;
           
-          for (let i = 0; i < filesToExtract.length; i++) {
-            const f = filesToExtract[i];
-            try {
-              const r = await figmaCollectTextNodes(f.key, figmaToken);
-              const texts = (r.texts || []).map((t: any) => t.text).join('\n');
-              if (texts.trim().length > 0) {
-                figmaContentsMap.set(f.key, texts.slice(0, 50000));
-                extractedCount++;
-              }
-            } catch (e) {
-              // 오류는 무시
-            }
+          // 병렬 처리 (최대 3개씩)
+          const BATCH_SIZE = 3;
+          for (let i = 0; i < filesToExtract.length; i += BATCH_SIZE) {
+            const batch = filesToExtract.slice(i, i + BATCH_SIZE);
+            const results = await Promise.allSettled(
+              batch.map(f => figmaCollectTextNodes(f.key, figmaToken))
+            );
             
-            if ((i + 1) % 10 === 0) {
-              console.log(`   🎨 ${i + 1}/${filesToExtract.length} 파일 처리 완료 (추출됨: ${extractedCount}개)`);
-            }
+            results.forEach((result, idx) => {
+              if (result.status === 'fulfilled') {
+                const f = batch[idx];
+                const texts = (result.value.texts || []).map((t: any) => t.text).join('\n');
+                if (texts.trim().length > 0) {
+                  figmaContentsMap.set(f.key, texts.slice(0, 20000));
+                  extractedCount++;
+                }
+              }
+            });
+            
+            console.log(`   🎨 ${Math.min(i + BATCH_SIZE, filesToExtract.length)}/${filesToExtract.length} 파일 처리 완료 (추출됨: ${extractedCount}개)`);
           }
           
           console.log(`✅ Figma 텍스트 추출 완료: ${extractedCount}/${filesToExtract.length}개`);
@@ -360,7 +365,7 @@ export async function POST(req: Request) {
               kind: 'issue',
               title: issue.fields.summary || 'Untitled Issue',
               snippet: description.slice(0, 200) || issue.fields.status?.name || '',
-              content: description.slice(0, 50000) || undefined,
+              content: description.slice(0, 20000) || undefined,
               url: `https://${credentials.domain}/browse/${issue.key}`,
               path: `${issue.fields.project?.key || 'JIRA'} / ${issue.key}`,
               owner_id: issue.fields.assignee?.accountId || issue.fields.reporter?.displayName || 'unknown',
