@@ -15,6 +15,7 @@ export interface DocRecord {
   updated_at?: string;
   mime_type?: string;
   drive_id?: string;
+  is_my_drive?: boolean;  // 내 드라이브 파일 여부
   indexed_at: number;
 }
 
@@ -38,6 +39,7 @@ export async function initSchema() {
         updated_at TEXT,
         mime_type TEXT,
         drive_id TEXT,
+        is_my_drive BOOLEAN DEFAULT FALSE,
         indexed_at BIGINT NOT NULL,
         search_vector tsvector GENERATED ALWAYS AS (
           to_tsvector('simple', 
@@ -58,6 +60,16 @@ export async function initSchema() {
       // 이미 존재하면 무시
       if (!e?.message?.includes('already exists')) {
         console.log('⚠️ content 컬럼 추가 실패 (이미 존재할 수 있음):', e?.message);
+      }
+    }
+
+    // is_my_drive 컬럼 추가 (마이그레이션)
+    try {
+      await sql`ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_my_drive BOOLEAN DEFAULT FALSE`;
+      console.log('✅ is_my_drive 컬럼 마이그레이션 완료');
+    } catch (e: any) {
+      if (!e?.message?.includes('already exists')) {
+        console.log('⚠️ is_my_drive 컬럼 추가 실패 (이미 존재할 수 있음):', e?.message);
       }
     }
 
@@ -115,7 +127,7 @@ export async function upsertDocument(doc: DocRecord) {
       INSERT INTO documents (
         id, platform, kind, title, snippet, content, url, path,
         owner_id, owner_name, owner_email, updated_at,
-        mime_type, drive_id, indexed_at
+        mime_type, drive_id, is_my_drive, indexed_at
       ) VALUES (
         ${doc.id},
         ${doc.platform},
@@ -131,6 +143,7 @@ export async function upsertDocument(doc: DocRecord) {
         ${doc.updated_at || null},
         ${doc.mime_type || null},
         ${doc.drive_id || null},
+        ${doc.is_my_drive || false},
         ${doc.indexed_at}
       )
       ON CONFLICT(id) DO UPDATE SET
@@ -147,6 +160,7 @@ export async function upsertDocument(doc: DocRecord) {
         updated_at = EXCLUDED.updated_at,
         mime_type = EXCLUDED.mime_type,
         drive_id = EXCLUDED.drive_id,
+        is_my_drive = EXCLUDED.is_my_drive,
         indexed_at = EXCLUDED.indexed_at
     `;
   } catch (error: any) {
@@ -283,6 +297,7 @@ export async function searchDocumentsSimple(query: string, options: {
           )
           AND platform = ${options.platform}
           AND kind = ${options.kind}
+          AND (platform != 'drive' OR is_my_drive = FALSE)
         `;
       } else if (options.platform) {
         partialResult = await sql`
@@ -294,6 +309,7 @@ export async function searchDocumentsSimple(query: string, options: {
             OR LOWER(path) LIKE ${pattern}
           )
           AND platform = ${options.platform}
+          AND (platform != 'drive' OR is_my_drive = FALSE)
         `;
       } else if (options.kind) {
         partialResult = await sql`
@@ -305,6 +321,7 @@ export async function searchDocumentsSimple(query: string, options: {
             OR LOWER(path) LIKE ${pattern}
           )
           AND kind = ${options.kind}
+          AND (platform != 'drive' OR is_my_drive = FALSE)
         `;
       } else {
         partialResult = await sql`
@@ -315,6 +332,7 @@ export async function searchDocumentsSimple(query: string, options: {
             OR LOWER(content) LIKE ${pattern}
             OR LOWER(path) LIKE ${pattern}
           )
+          AND (platform != 'drive' OR is_my_drive = FALSE)
         `;
       }
       

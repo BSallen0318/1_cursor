@@ -112,6 +112,7 @@ export async function POST(req: Request) {
           updated_at: f.modifiedTime || new Date().toISOString(),
           mime_type: f.mimeType,
           drive_id: f.driveId,
+          is_my_drive: f.owners?.[0]?.me === true && !f.driveId, // 내가 소유하고 공유 드라이브가 아님
           indexed_at: Date.now()
         }));
 
