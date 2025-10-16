@@ -162,18 +162,56 @@ export async function POST(req: Request) {
           _recency: new Date(d.updatedAt).getTime()
         }));
 
-        // Gemini 의미 검색 (복잡한 쿼리이고, 검색 결과가 많으면)
-        if (!fast && isComplexQuery && filtered.length > 10 && (hasGemini() || hasOpenAI())) {
+        // Gemini 의미 검색 (복잡한 쿼리일 때)
+        if (!fast && isComplexQuery && (hasGemini() || hasOpenAI())) {
           try {
             const semanticStartTime = Date.now();
             const [qv] = await embedTexts([q]);
             
-            // 상위 100개만 의미 유사도 계산
-            const pool = filtered.slice(0, 100);
-            const texts = pool.map((d) => {
+            // 결과가 적으면 전체 DB에서 상위 100개를 가져와 검색
+            let pool = filtered;
+            if (filtered.length < 20) {
+              debug.semanticExpandedSearch = true;
+              // DB에서 최신 100개 문서 가져오기
+              const allDocs = await searchDocumentsSimple('', {
+                platform,
+                limit: 100,
+                offset: 0
+              });
+              pool = allDocs.map((doc: DocRecord) => {
+                let snippet = doc.snippet || '';
+                if (doc.content) {
+                  snippet = doc.content.slice(0, 200) + (doc.content.length > 200 ? '...' : '');
+                }
+                return {
+                  id: doc.id,
+                  platform: doc.platform as Platform,
+                  kind: (doc.kind || 'file') as DocKind,
+                  title: doc.title,
+                  snippet,
+                  url: doc.url || '',
+                  path: doc.path || doc.title,
+                  owner: {
+                    id: doc.owner_id || 'unknown',
+                    name: doc.owner_name || 'unknown',
+                    email: doc.owner_email || '',
+                    role: 'member' as const
+                  },
+                  updatedAt: doc.updated_at || new Date().toISOString(),
+                  tags: [doc.platform],
+                  score: 1,
+                  content: doc.content,
+                  _titleScore: 0,
+                  _contentScore: 0,
+                  _recency: new Date(doc.updated_at || 0).getTime()
+                };
+              });
+            }
+            
+            const texts = pool.map((d: any) => {
               const titlePart = d.title || '';
               const snippetPart = d.snippet || '';
-              const contentPart = (d as any).content ? (d as any).content.slice(0, 500) : '';
+              const contentPart = d.content ? d.content.slice(0, 500) : '';
               return `${titlePart} ${snippetPart} ${contentPart}`.trim();
             });
             
@@ -184,15 +222,26 @@ export async function POST(req: Request) {
               sims[pool[i].id] = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
             }
             
-            // 의미 유사도 점수 추가
-            filtered = filtered.map((d: any) => ({
-              ...d,
-              _embedScore: (sims[d.id] || 0) * 100  // 0-100 스케일
-            }));
+            // 의미 유사도로 필터링 (0.3 이상만)
+            const similarDocs = pool.filter((d: any) => (sims[d.id] || 0) >= 0.3);
+            
+            // 기존 filtered와 병합
+            const mergedMap = new Map();
+            for (const d of filtered) {
+              mergedMap.set(d.id, { ...d, _embedScore: (sims[d.id] || 0) * 100 });
+            }
+            for (const d of similarDocs) {
+              if (!mergedMap.has(d.id)) {
+                mergedMap.set(d.id, { ...d, _embedScore: (sims[d.id] || 0) * 100 });
+              }
+            }
+            
+            filtered = Array.from(mergedMap.values());
             
             debug.semanticApplied = true;
             debug.semanticTime = Date.now() - semanticStartTime;
             debug.semanticCount = Object.keys(sims).length;
+            debug.semanticMatches = similarDocs.length;
           } catch (e: any) {
             debug.semanticError = e?.message;
           }
