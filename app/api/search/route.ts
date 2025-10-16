@@ -177,11 +177,23 @@ export async function POST(req: Request) {
               debug.semanticExpandedSearch = true;
               
               // 검색어에서 의미있는 키워드 추출 (2글자 이상)
-              const keywords = q
+              let keywords = q
                 .replace(/[을를이가에서와과는도]$/g, '') // 조사 제거
                 .split(/[\s,.\-_]+/)
                 .filter(k => k.length >= 2)
                 .slice(0, 3); // 상위 3개만
+              
+              // 변형 키워드 추가 (예: "무인매장" → "무인" 포함)
+              const expandedKeywords: string[] = [...keywords];
+              for (const kw of keywords) {
+                if (kw.length >= 4) {
+                  // 앞 2글자 추가 (무인매장 → 무인)
+                  expandedKeywords.push(kw.slice(0, 2));
+                  // 앞 3글자 추가 (무인매장 → 무인매)
+                  if (kw.length >= 5) expandedKeywords.push(kw.slice(0, 3));
+                }
+              }
+              keywords = [...new Set(expandedKeywords)].slice(0, 5); // 중복 제거, 최대 5개
               
               debug.extractedKeywords = keywords;
               
@@ -223,8 +235,8 @@ export async function POST(req: Request) {
                 }
               }
               
-              // 최대 300개로 제한 (Gemini API 비용/시간 고려)
-              allDocs = allDocs.slice(0, 300);
+              // 최대 150개로 제한 (Gemini API 비용/시간 고려 - 속도 개선)
+              allDocs = allDocs.slice(0, 150);
               debug.semanticPoolSize = allDocs.length;
               pool = allDocs.map((doc: DocRecord) => {
                 let snippet = doc.snippet || '';
@@ -270,9 +282,17 @@ export async function POST(req: Request) {
               sims[pool[i].id] = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
             }
             
-            // 의미 유사도로 필터링 (0.5 이상만 - 더 엄격하게)
-            const similarDocs = pool.filter((d: any) => (sims[d.id] || 0) >= 0.5);
-            debug.semanticThreshold = 0.5;
+            // 의미 유사도로 필터링 (0.65 이상만 - 엄격하게)
+            const threshold = 0.65;
+            const similarDocs = pool.filter((d: any) => (sims[d.id] || 0) >= threshold);
+            debug.semanticThreshold = threshold;
+            
+            // 상위 점수 로깅
+            const topScores = pool
+              .map((d: any) => ({ title: d.title, score: sims[d.id] || 0 }))
+              .sort((a, b) => b.score - a.score)
+              .slice(0, 10);
+            debug.topSemanticScores = topScores;
             
             // 기존 filtered와 병합
             const mergedMap = new Map();
