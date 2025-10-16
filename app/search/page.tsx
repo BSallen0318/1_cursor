@@ -43,49 +43,6 @@ export default function SearchPage() {
   const abortRef = useRef<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [extracting, setExtracting] = useState(false);
-  const [extractStatus, setExtractStatus] = useState<any>(null);
-
-  // 추출 상태 조회
-  const loadExtractStatus = async () => {
-    try {
-      const res = await fetch('/api/index/extract-content', { credentials: 'include' });
-      const data = await res.json();
-      setExtractStatus(data);
-    } catch (e) {
-      console.error('추출 상태 조회 실패:', e);
-    }
-  };
-
-  // 문서 내용 추출 (300개씩)
-  const onExtractContent = async () => {
-    setExtracting(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/index/extract-content', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ batchSize: 300, platform: 'all' })
-      });
-      const result = await res.json();
-      
-      if (result.success) {
-        alert(`✅ 추출 완료!\n\n추출: ${result.extracted}개\n실패: ${result.failed}개\n남은 문서: ${result.remaining}개\n소요 시간: ${Math.round(result.duration / 1000)}초`);
-        await loadExtractStatus();
-      } else {
-        setError(result.error || '추출 실패');
-      }
-    } catch (e: any) {
-      setError(e?.message || '추출 실패');
-    } finally {
-      setExtracting(false);
-    }
-  };
-
-  useEffect(() => {
-    loadExtractStatus();
-  }, []);
 
   const onSearch = async () => {
     setLoading(true);
@@ -210,41 +167,6 @@ export default function SearchPage() {
             >
               🔗 연동 설정
             </Link>
-          </div>
-        </div>
-
-        {/* 문서 내용 추출 버튼 */}
-        <div className="bg-white dark:bg-zinc-950 rounded-2xl shadow-md border border-zinc-200 dark:border-zinc-800 p-6">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex-1">
-              <h3 className="text-lg font-bold mb-2">📄 문서 내용 추출</h3>
-              {extractStatus && (
-                <div className="space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
-                  <div>Drive: {extractStatus.drive?.extracted || 0} / {extractStatus.drive?.total || 0} 추출 완료 ({extractStatus.drive?.remaining || 0}개 남음)</div>
-                  <div>Figma: {extractStatus.figma?.extracted || 0} / {extractStatus.figma?.total || 0} 추출 완료 ({extractStatus.figma?.remaining || 0}개 남음)</div>
-                  {extractStatus.drive?.total > 0 && (
-                    <div className="mt-2">
-                      <div className="w-full bg-zinc-200 dark:bg-zinc-800 rounded-full h-2">
-                        <div 
-                          className="bg-green-500 h-2 rounded-full transition-all" 
-                          style={{ width: `${Math.round((extractStatus.drive.extracted / extractStatus.drive.total) * 100)}%` }}
-                        />
-                      </div>
-                      <div className="text-xs mt-1 text-zinc-500">
-                        {Math.round((extractStatus.drive.extracted / extractStatus.drive.total) * 100)}% 완료
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <button
-              onClick={onExtractContent}
-              disabled={extracting || (extractStatus?.drive?.remaining === 0 && extractStatus?.figma?.remaining === 0)}
-              className="px-6 py-3 rounded-xl bg-blue-500 hover:bg-blue-600 disabled:bg-zinc-300 dark:disabled:bg-zinc-700 text-white font-semibold transition-colors shadow-md disabled:cursor-not-allowed"
-            >
-              {extracting ? '추출 중...' : '300개 추출하기'}
-            </button>
           </div>
         </div>
 

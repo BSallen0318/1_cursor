@@ -17,6 +17,8 @@ export default function IntegrationsPage() {
   const [indexStatus, setIndexStatus] = useState<any>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<any>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractStatus, setExtractStatus] = useState<any>(null);
 
   const load = async () => {
     const entries = await Promise.all(
@@ -38,9 +40,44 @@ export default function IntegrationsPage() {
     }
   };
 
+  const loadExtractStatus = async () => {
+    try {
+      const res = await fetch('/api/index/extract-content', { credentials: 'include' });
+      const data = await res.json();
+      setExtractStatus(data);
+    } catch (e) {
+      console.error('추출 상태 조회 실패:', e);
+    }
+  };
+
+  const onExtractContent = async () => {
+    setExtracting(true);
+    try {
+      const res = await fetch('/api/index/extract-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ batchSize: 300, platform: 'all' })
+      });
+      const result = await res.json();
+      
+      if (result.success) {
+        alert(`✅ 추출 완료!\n\n추출: ${result.extracted}개\n실패: ${result.failed}개\n남은 문서: ${result.remaining}개\n소요 시간: ${Math.round(result.duration / 1000)}초`);
+        await loadExtractStatus();
+      } else {
+        alert(`❌ 추출 실패: ${result.error}`);
+      }
+    } catch (e: any) {
+      alert(`❌ 추출 실패: ${e?.message || '알 수 없는 오류'}`);
+    } finally {
+      setExtracting(false);
+    }
+  };
+
   useEffect(() => { 
     load();
     loadIndexStatus();
+    loadExtractStatus();
   }, []);
 
   const toggle = async (p: Provider) => {
@@ -223,80 +260,14 @@ export default function IntegrationsPage() {
           <h3 className="text-lg font-bold mb-4">🚀 색인 실행</h3>
           
           <div className="space-y-4">
-            <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800">
-              <div className="flex items-start gap-3">
-                <span className="text-2xl">💡</span>
-                <div className="flex-1 text-sm text-blue-700 dark:text-blue-300">
-                  <strong>증분 색인</strong>: 마지막 색인 이후 수정된 문서만 업데이트 (5-15초) ⚡
-                  <br />
-                  <strong>전체 색인</strong>: 모든 문서를 새로 색인 (30초-2분, 권한/삭제 반영)
-                </div>
-              </div>
-            </div>
-
-            {/* 증분 색인 버튼 (기본) */}
-            <div className="flex gap-3 flex-wrap">
-              <button
-                onClick={() => startSync(['drive', 'figma', 'jira'], true)}
-                disabled={syncing}
-                className="flex-1 min-w-[200px] h-14 px-6 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {syncing ? '⏳ 색인 중...' : '⚡ 증분 색인 (빠른 업데이트)'}
-              </button>
-              <button
-                onClick={() => startSync(['drive', 'figma', 'jira'], false)}
-                disabled={syncing}
-                className="min-w-[150px] h-14 px-6 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                🔄 전체 색인
-              </button>
-            </div>
-
-            {/* 개별 플랫폼 버튼 */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => startSync(['drive'], true)}
-                disabled={syncing}
-                className="h-10 px-4 rounded-lg border-2 border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 font-medium text-sm transition-all disabled:opacity-50"
-              >
-                ⚡📊 Drive 증분
-              </button>
-              <button
-                onClick={() => startSync(['drive'], false)}
-                disabled={syncing}
-                className="h-10 px-4 rounded-lg border-2 border-green-500 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/20 font-medium text-sm transition-all disabled:opacity-50"
-              >
-                🔄📊 Drive 전체
-              </button>
-              <button
-                onClick={() => startSync(['figma'], true)}
-                disabled={syncing}
-                className="h-10 px-4 rounded-lg border-2 border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 font-medium text-sm transition-all disabled:opacity-50"
-              >
-                ⚡🎨 Figma 증분
-              </button>
-              <button
-                onClick={() => startSync(['figma'], false)}
-                disabled={syncing}
-                className="h-10 px-4 rounded-lg border-2 border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/20 font-medium text-sm transition-all disabled:opacity-50"
-              >
-                🔄🎨 Figma 전체
-              </button>
-              <button
-                onClick={() => startSync(['jira'], true)}
-                disabled={syncing}
-                className="h-10 px-4 rounded-lg border-2 border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 font-medium text-sm transition-all disabled:opacity-50"
-              >
-                ⚡📋 Jira 증분
-              </button>
-              <button
-                onClick={() => startSync(['jira'], false)}
-                disabled={syncing}
-                className="h-10 px-4 rounded-lg border-2 border-orange-500 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/20 font-medium text-sm transition-all disabled:opacity-50"
-              >
-                🔄📋 Jira 전체
-              </button>
-            </div>
+            {/* 색인 버튼 - 증분 색인만 */}
+            <button
+              onClick={() => startSync(['drive', 'figma', 'jira'], true)}
+              disabled={syncing}
+              className="w-full h-14 px-6 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {syncing ? '⏳ 색인 중...' : '🚀 색인 실행'}
+            </button>
           </div>
 
           {/* 색인 결과 */}
@@ -321,10 +292,73 @@ export default function IntegrationsPage() {
                 >
                   <span className="font-semibold capitalize">{platform}: </span>
                   {data.success ? data.message : data.error}
-          </div>
-        ))}
+                </div>
+              ))}
             </div>
           )}
+        </div>
+
+        {/* 문서 내용 추출 */}
+        <div className="bg-white dark:bg-zinc-950 rounded-2xl border-2 border-zinc-200 dark:border-zinc-800 p-6 shadow-md mt-6">
+          <h3 className="text-lg font-bold mb-4">📄 문서 내용 추출</h3>
+          
+          <div className="space-y-4">
+            {extractStatus && (
+              <div className="space-y-3">
+                <div className="p-4 bg-green-50 dark:bg-green-950/20 rounded-xl border border-green-200 dark:border-green-800">
+                  <div className="text-sm font-medium text-green-700 dark:text-green-300 mb-2">
+                    📊 Drive: {extractStatus.drive?.extracted || 0} / {extractStatus.drive?.total || 0} 추출 완료
+                    <span className="ml-2 text-xs">({extractStatus.drive?.remaining || 0}개 남음)</span>
+                  </div>
+                  {extractStatus.drive?.total > 0 && (
+                    <div>
+                      <div className="w-full bg-green-200 dark:bg-green-900 rounded-full h-2">
+                        <div 
+                          className="bg-green-500 h-2 rounded-full transition-all" 
+                          style={{ width: `${Math.round((extractStatus.drive.extracted / extractStatus.drive.total) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="text-xs mt-1 text-green-600 dark:text-green-400">
+                        {Math.round((extractStatus.drive.extracted / extractStatus.drive.total) * 100)}% 완료
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-4 bg-purple-50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-800">
+                  <div className="text-sm font-medium text-purple-700 dark:text-purple-300 mb-2">
+                    🎨 Figma: {extractStatus.figma?.extracted || 0} / {extractStatus.figma?.total || 0} 추출 완료
+                    <span className="ml-2 text-xs">({extractStatus.figma?.remaining || 0}개 남음)</span>
+                  </div>
+                  {extractStatus.figma?.total > 0 && (
+                    <div>
+                      <div className="w-full bg-purple-200 dark:bg-purple-900 rounded-full h-2">
+                        <div 
+                          className="bg-purple-500 h-2 rounded-full transition-all" 
+                          style={{ width: `${Math.round((extractStatus.figma.extracted / extractStatus.figma.total) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="text-xs mt-1 text-purple-600 dark:text-purple-400">
+                        {Math.round((extractStatus.figma.extracted / extractStatus.figma.total) * 100)}% 완료
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={onExtractContent}
+              disabled={extracting || (extractStatus?.drive?.remaining === 0 && extractStatus?.figma?.remaining === 0)}
+              className="w-full h-14 px-6 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {extracting ? '⏳ 추출 중...' : '📄 300개 내용 추출하기'}
+            </button>
+
+            <div className="text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900 p-3 rounded-lg">
+              💡 색인 완료 후 이 버튼을 눌러 문서 내용을 추출하세요. 300개씩 추출되며, 원하는 만큼 반복해서 클릭할 수 있습니다.
+            </div>
+          </div>
         </div>
       </div>
     </main>
