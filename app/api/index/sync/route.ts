@@ -96,7 +96,7 @@ export async function POST(req: Request) {
           return 'file';
         }
 
-        // 문서 내용 추출 (선택적 - 최신 50개만, 타임아웃 방지)
+        // 문서 내용 추출 (Google Docs, Sheets, Slides - 최신 150개)
         const contentsMap = new Map<string, string>();
         const extractableFiles = files
           .filter((f: any) => 
@@ -105,14 +105,14 @@ export async function POST(req: Request) {
             f.mimeType === 'application/vnd.google-apps.presentation'
           )
           .sort((a: any, b: any) => new Date(b.modifiedTime).getTime() - new Date(a.modifiedTime).getTime())
-          .slice(0, 50);
+          .slice(0, 150);
         
         if (extractableFiles.length > 0) {
-          console.log(`📄 문서 내용 추출 시작 (최신 ${extractableFiles.length}개만, 전체 ${files.length}개는 메타데이터만 저장)...`);
+          console.log(`📄 문서 내용 추출 시작 (최신 ${extractableFiles.length}개)...`);
           
           let extractedCount = 0;
           
-          // 병렬 처리
+          // 완전 병렬 처리
           const results = await Promise.allSettled(
             extractableFiles.map((f: any) => 
               driveExportPlainText(driveTokens, f.id, f.mimeType)
@@ -122,12 +122,12 @@ export async function POST(req: Request) {
           
           results.forEach((result) => {
             if (result.status === 'fulfilled' && result.value.content && result.value.content.trim().length > 0) {
-              contentsMap.set(result.value.id, result.value.content.slice(0, 30000));
+              contentsMap.set(result.value.id, result.value.content.slice(0, 50000));
               extractedCount++;
             }
           });
           
-          console.log(`✅ 문서 내용 추출 완료: ${extractedCount}개 (나머지 ${files.length - extractableFiles.length}개는 제목/경로만 저장)`);
+          console.log(`✅ 문서 내용 추출 완료: ${extractedCount}개`);
         }
 
         const docRecords: DocRecord[] = files.map((f: any) => ({
@@ -242,17 +242,17 @@ export async function POST(req: Request) {
             console.log(`🎨 Figma 파일 ${allFiles.length}개 수집 완료`);
           }
 
-          // Figma 텍스트 내용 추출 (선택적 - 최신 30개만, 타임아웃 방지)
+          // Figma 텍스트 내용 추출 (최신 50개)
           const figmaContentsMap = new Map<string, string>();
           const filesToExtract = allFiles
             .sort((a, b) => new Date(b.last_modified).getTime() - new Date(a.last_modified).getTime())
-            .slice(0, 30);
+            .slice(0, 50);
           
           if (filesToExtract.length > 0) {
-            console.log(`🎨 Figma 텍스트 추출 시작 (최신 ${filesToExtract.length}개만, 전체 ${allFiles.length}개는 메타데이터만 저장)...`);
+            console.log(`🎨 Figma 텍스트 추출 시작 (최신 ${filesToExtract.length}개)...`);
             let extractedCount = 0;
             
-            // 병렬 처리
+            // 완전 병렬 처리
             const results = await Promise.allSettled(
               filesToExtract.map(f => 
                 figmaCollectTextNodes(f.key, figmaToken)
@@ -264,13 +264,13 @@ export async function POST(req: Request) {
               if (result.status === 'fulfilled') {
                 const texts = (result.value.texts || []).map((t: any) => t.text).join('\n');
                 if (texts.trim().length > 0) {
-                  figmaContentsMap.set(result.value.key, texts.slice(0, 30000));
+                  figmaContentsMap.set(result.value.key, texts.slice(0, 50000));
                   extractedCount++;
                 }
               }
             });
             
-            console.log(`✅ Figma 텍스트 추출 완료: ${extractedCount}개 (나머지 ${allFiles.length - filesToExtract.length}개는 제목만 저장)`);
+            console.log(`✅ Figma 텍스트 추출 완료: ${extractedCount}개`);
           }
 
           // DB 저장 형식으로 변환
@@ -371,7 +371,7 @@ export async function POST(req: Request) {
               kind: 'issue',
               title: issue.fields.summary || 'Untitled Issue',
               snippet: description.slice(0, 200) || issue.fields.status?.name || '',
-              content: description.slice(0, 30000) || undefined,
+              content: description.slice(0, 50000) || undefined,
               url: `https://${credentials.domain}/browse/${issue.key}`,
               path: `${issue.fields.project?.key || 'JIRA'} / ${issue.key}`,
               owner_id: issue.fields.assignee?.accountId || issue.fields.reporter?.displayName || 'unknown',
