@@ -112,20 +112,26 @@ export async function POST(req: Request) {
           
           let extractedCount = 0;
           
-          // 완전 병렬 처리
-          const results = await Promise.allSettled(
-            extractableFiles.map((f: any) => 
-              driveExportPlainText(driveTokens, f.id, f.mimeType)
-                .then(content => ({ id: f.id, content }))
-            )
-          );
-          
-          results.forEach((result) => {
-            if (result.status === 'fulfilled' && result.value.content && result.value.content.trim().length > 0) {
-              contentsMap.set(result.value.id, result.value.content.slice(0, 50000));
-              extractedCount++;
-            }
-          });
+          // 배치 처리 (10개씩 순차 처리 - Rate Limit 방지)
+          const BATCH_SIZE = 10;
+          for (let i = 0; i < extractableFiles.length; i += BATCH_SIZE) {
+            const batch = extractableFiles.slice(i, i + BATCH_SIZE);
+            const results = await Promise.allSettled(
+              batch.map((f: any) => 
+                driveExportPlainText(driveTokens, f.id, f.mimeType)
+                  .then(content => ({ id: f.id, content }))
+              )
+            );
+            
+            results.forEach((result) => {
+              if (result.status === 'fulfilled' && result.value.content && result.value.content.trim().length > 0) {
+                contentsMap.set(result.value.id, result.value.content.slice(0, 50000));
+                extractedCount++;
+              }
+            });
+            
+            console.log(`   📝 ${Math.min(i + BATCH_SIZE, extractableFiles.length)}/${extractableFiles.length} 처리 완료 (추출: ${extractedCount}개)`);
+          }
           
           console.log(`✅ 문서 내용 추출 완료: ${extractedCount}개`);
         }
@@ -252,23 +258,29 @@ export async function POST(req: Request) {
             console.log(`🎨 Figma 텍스트 추출 시작 (최신 ${filesToExtract.length}개)...`);
             let extractedCount = 0;
             
-            // 완전 병렬 처리
-            const results = await Promise.allSettled(
-              filesToExtract.map(f => 
-                figmaCollectTextNodes(f.key, figmaToken)
-                  .then(r => ({ key: f.key, texts: r.texts }))
-              )
-            );
-            
-            results.forEach((result) => {
-              if (result.status === 'fulfilled') {
-                const texts = (result.value.texts || []).map((t: any) => t.text).join('\n');
-                if (texts.trim().length > 0) {
-                  figmaContentsMap.set(result.value.key, texts.slice(0, 50000));
-                  extractedCount++;
+            // 배치 처리 (5개씩 순차 처리 - Rate Limit 방지)
+            const BATCH_SIZE = 5;
+            for (let i = 0; i < filesToExtract.length; i += BATCH_SIZE) {
+              const batch = filesToExtract.slice(i, i + BATCH_SIZE);
+              const results = await Promise.allSettled(
+                batch.map(f => 
+                  figmaCollectTextNodes(f.key, figmaToken)
+                    .then(r => ({ key: f.key, texts: r.texts }))
+                )
+              );
+              
+              results.forEach((result) => {
+                if (result.status === 'fulfilled') {
+                  const texts = (result.value.texts || []).map((t: any) => t.text).join('\n');
+                  if (texts.trim().length > 0) {
+                    figmaContentsMap.set(result.value.key, texts.slice(0, 50000));
+                    extractedCount++;
+                  }
                 }
-              }
-            });
+              });
+              
+              console.log(`   🎨 ${Math.min(i + BATCH_SIZE, filesToExtract.length)}/${filesToExtract.length} 처리 완료 (추출: ${extractedCount}개)`);
+            }
             
             console.log(`✅ Figma 텍스트 추출 완료: ${extractedCount}개`);
           }
