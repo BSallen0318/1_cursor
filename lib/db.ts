@@ -361,7 +361,7 @@ export async function searchDocumentsSimple(query: string, options: {
       });
     }
     
-    // 관련도 점수 계산
+    // 관련도 점수 계산 (키워드 점수 1/10로 낮춤)
     rows = rows.map(doc => {
       let score = 0;
       const title = doc.title.toLowerCase();
@@ -369,12 +369,12 @@ export async function searchDocumentsSimple(query: string, options: {
       
       for (const p of patterns) {
         const word = p.replace(/%/g, '');
-        // 제목 매칭
-        if (title.includes(word)) score += 100;
-        // content 매칭 (단어 빈도 고려)
+        // 제목 매칭 (100점 → 10점)
+        if (title.includes(word)) score += 10;
+        // content 매칭 (빈도당 5점, 최대 50점 → 빈도당 0.5점, 최대 5점)
         if (content.includes(word)) {
           const count = (content.match(new RegExp(word, 'g')) || []).length;
-          score += Math.min(count * 5, 50); // 최대 50점
+          score += Math.min(count * 0.5, 5);
         }
       }
       

@@ -44,19 +44,26 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchContent, setSearchContent] = useState(false); // 내용 찾기 체크박스
+  const [lastSearchUsedContent, setLastSearchUsedContent] = useState(false); // 마지막 검색이 내용 찾기를 사용했는지
 
   const onSearch = async () => {
     setLoading(true);
     setError(null);
+    setData(null); // 이전 검색 결과 즉시 제거
+    setLastSearchUsedContent(searchContent); // 현재 검색이 내용 찾기를 사용하는지 저장
     try {
       if (abortRef.current) abortRef.current.abort();
       const controller = new AbortController();
       abortRef.current = controller;
+      
+      // 내용 찾기 체크 시 size=10으로 고정
+      const searchSize = searchContent ? 10 : 10;
+      
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ q, page, size: 10, filters, sort: filters?.sort || 'relevance', fast: !searchContent }),
+        body: JSON.stringify({ q, page, size: searchSize, filters, sort: filters?.sort || 'relevance', fast: !searchContent }),
         signal: controller.signal
       });
       const text = await res.text();
@@ -137,7 +144,7 @@ export default function SearchPage() {
                 className="w-4 h-4 text-green-500 border-zinc-300 rounded focus:ring-green-500" 
               />
               <label htmlFor="searchContent" className="text-sm font-medium text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
-                📄 내용 찾기 (Gemini AI 사용, 느리지만 정확함)
+                📄 내용 찾기 (문서 안의 내용을 찾으려면 체크하고 검색하세요)
               </label>
             </div>
           </div>
@@ -247,24 +254,24 @@ export default function SearchPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-[400px]">
               <div className="lg:col-span-2">
-                {loading && <LoadingIndicator label="문서를 찾고 있습니다. 폴더를 싹싹 긁으며 보느라 시간이 좀 걸릴 수 있습니다..." />}
+                {loading && <LoadingIndicator label="문서를 찾고 있습니다. 제목만 찾는 경우 내용 찾기 체크박스를 해제하면 훨씬 빨라요." />}
                 {error && <div className="text-red-500 bg-red-50 dark:bg-red-950/20 p-4 rounded-xl border border-red-200 dark:border-red-800">{error}</div>}
-                {!q && (!data || data.items.length === 0) && (
+                {!loading && !q && (!data || data.items.length === 0) && (
                   <div className="flex flex-col items-center justify-center py-32 text-center">
                     <span className="text-6xl mb-4">🔍</span>
                     <div className="text-zinc-400 dark:text-zinc-600 text-xl">찾을 문서를 입력해주세요</div>
                   </div>
                 )}
-                {q && data && (
+                {!loading && q && data && (
                   <ResultsList items={data.items} activeId={selectedId || undefined} onSelect={async (id: string) => {
                     setSelectedId(id);
                     setSelected({ loading: true });
                     const r = await fetch(`/api/docs/${id}?q=${encodeURIComponent(q)}`, { credentials: 'include' });
                     const payload = await r.json();
                     setSelected(payload);
-                  }} searchContent={searchContent} query={q} />
+                  }} searchContent={lastSearchUsedContent} query={q} />
                 )}
-                {data && (
+                {!loading && data && !lastSearchUsedContent && (
                   <div className="flex items-center gap-3 mt-6 justify-center">
                     <button 
                       disabled={page <= 1} 
@@ -277,12 +284,17 @@ export default function SearchPage() {
                       {page}
                     </div>
                     <button 
-                      disabled={(data.items?.length || 0) < 1} 
+                      disabled={(data.items?.length || 0) < 10} 
                       onClick={() => setPage((p) => p + 1)} 
                       className="px-5 h-10 rounded-lg border-2 border-zinc-300 dark:border-zinc-700 disabled:opacity-30 hover:bg-zinc-50 dark:hover:bg-zinc-900 font-medium transition-colors"
                     >
                       다음 →
                     </button>
+                  </div>
+                )}
+                {!loading && data && lastSearchUsedContent && (
+                  <div className="text-center mt-6 text-sm text-zinc-500">
+                    💡 내용 찾기 사용 시 상위 10개만 표시됩니다
                   </div>
                 )}
               </div>

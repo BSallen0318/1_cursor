@@ -123,31 +123,31 @@ export async function POST(req: Request) {
           filtered = filtered.filter((d) => +new Date(d.updatedAt) >= cutoff);
         }
 
-        // 검색어 관련성 점수 계산 및 정렬
+        // 검색어 관련성 점수 계산 및 정렬 (1/10로 낮춤)
         const computeTitleScore = (title: string, query: string): number => {
           if (!query) return 0;
           const lowerTitle = title.toLowerCase();
           const lowerQuery = query.toLowerCase();
-          // 완전 일치
-          if (lowerTitle === lowerQuery) return 100;
-          // 시작 일치
-          if (lowerTitle.startsWith(lowerQuery)) return 50;
-          // 포함
-          if (lowerTitle.includes(lowerQuery)) return 30;
-          // 단어 매칭
+          // 완전 일치 (100 → 10)
+          if (lowerTitle === lowerQuery) return 10;
+          // 시작 일치 (50 → 5)
+          if (lowerTitle.startsWith(lowerQuery)) return 5;
+          // 포함 (30 → 3)
+          if (lowerTitle.includes(lowerQuery)) return 3;
+          // 단어 매칭 (10 → 1)
           const tokens = lowerQuery.split(/\s+/).filter(Boolean);
           let matchCount = 0;
           for (const tok of tokens) {
             if (lowerTitle.includes(tok)) matchCount++;
           }
-          return matchCount * 10;
+          return matchCount * 1;
         };
 
         const computeContentScore = (snippet: string, query: string): number => {
           if (!query || !snippet) return 0;
           const lowerSnippet = snippet.toLowerCase();
           const lowerQuery = query.toLowerCase();
-          if (lowerSnippet.includes(lowerQuery)) return 10;
+          if (lowerSnippet.includes(lowerQuery)) return 1; // 10 → 1
           return 0;
         };
 
