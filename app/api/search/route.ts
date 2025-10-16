@@ -223,21 +223,24 @@ export async function POST(req: Request) {
               let allDocs = Array.from(uniqueMap.values())
                 .filter(doc => doc.content && doc.content.length > 50);
               
-              // 키워드 관련도 순으로 정렬 (제목 매칭 우선)
-              allDocs.sort((a, b) => {
-                let scoreA = 0;
-                let scoreB = 0;
-                
+              // 키워드 관련도 계산
+              const docsWithScore = allDocs.map(doc => {
+                let score = 0;
                 for (const kw of keywords) {
                   const kwLower = kw.toLowerCase();
-                  if (a.title.toLowerCase().includes(kwLower)) scoreA += 10;
-                  if (b.title.toLowerCase().includes(kwLower)) scoreB += 10;
-                  if (a.content?.toLowerCase().includes(kwLower)) scoreA += 1;
-                  if (b.content?.toLowerCase().includes(kwLower)) scoreB += 1;
+                  if (doc.title.toLowerCase().includes(kwLower)) score += 10;
+                  if (doc.content?.toLowerCase().includes(kwLower)) score += 1;
                 }
-                
-                return scoreB - scoreA; // 높은 점수 우선
+                return { doc, score };
               });
+              
+              // 키워드가 있는 문서만 선택 (점수 > 0)
+              const relevantDocs = docsWithScore
+                .filter(d => d.score > 0)
+                .sort((a, b) => b.score - a.score);
+              
+              allDocs = relevantDocs.map(d => d.doc);
+              debug.keywordFilteredCount = allDocs.length;
               
               // 키워드 매칭이 적으면 전체 content 문서 추가
               if (allDocs.length < 100) {
@@ -256,8 +259,13 @@ export async function POST(req: Request) {
                 }
               }
               
-              // 최대 150개로 제한 (키워드 관련도 높은 것 우선)
-              allDocs = allDocs.slice(0, 150);
+              // 최대 300개로 제한 (키워드 관련도 높은 것 우선)
+              // 키워드가 있는 문서만 선택했으므로 더 많이 처리 가능
+              const maxPoolSize = 300;
+              if (allDocs.length > maxPoolSize) {
+                allDocs = allDocs.slice(0, maxPoolSize);
+                debug.semanticPoolLimited = true;
+              }
               debug.semanticPoolSize = allDocs.length;
               pool = allDocs.map((doc: DocRecord) => {
                 let snippet = doc.snippet || '';
