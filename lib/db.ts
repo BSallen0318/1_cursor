@@ -267,7 +267,7 @@ export async function searchDocumentsSimple(query: string, options: {
     const allResults: DocRecord[] = [];
     const seenIds = new Set<string>();
     
-    for (const pattern of patterns.slice(0, 5)) { // 최대 5개 키워드
+    for (const pattern of patterns) { // 모든 키워드 검색
       let partialResult;
       
       if (options.platform && options.kind) {
@@ -281,8 +281,6 @@ export async function searchDocumentsSimple(query: string, options: {
           )
           AND platform = ${options.platform}
           AND kind = ${options.kind}
-          ORDER BY updated_at DESC
-          LIMIT 200
         `;
       } else if (options.platform) {
         partialResult = await sql`
@@ -294,8 +292,6 @@ export async function searchDocumentsSimple(query: string, options: {
             OR LOWER(path) LIKE ${pattern}
           )
           AND platform = ${options.platform}
-          ORDER BY updated_at DESC
-          LIMIT 200
         `;
       } else if (options.kind) {
         partialResult = await sql`
@@ -307,8 +303,6 @@ export async function searchDocumentsSimple(query: string, options: {
             OR LOWER(path) LIKE ${pattern}
           )
           AND kind = ${options.kind}
-          ORDER BY updated_at DESC
-          LIMIT 200
         `;
       } else {
         partialResult = await sql`
@@ -319,8 +313,6 @@ export async function searchDocumentsSimple(query: string, options: {
             OR LOWER(content) LIKE ${pattern}
             OR LOWER(path) LIKE ${pattern}
           )
-          ORDER BY updated_at DESC
-          LIMIT 200
         `;
       }
       
@@ -367,7 +359,8 @@ export async function searchDocumentsSimple(query: string, options: {
     // 관련도 순으로 정렬
     rows.sort((a: any, b: any) => (b._relevance || 0) - (a._relevance || 0));
     
-    return rows.slice(0, options.limit || 100);
+    // 제한 없이 모든 결과 반환 (API에서 처리)
+    return rows;
   } catch (error: any) {
     console.error('❌ 단순 검색 실패:', error);
     return [];

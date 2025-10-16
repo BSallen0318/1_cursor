@@ -56,10 +56,10 @@ export async function POST(req: Request) {
           platform = src;
         }
 
-        // 1단계: 빠른 키워드 검색 (전체 2623개 대상)
+        // 1단계: 키워드 검색 (모든 문서 대상, 제한 없음)
         const dbResults = await searchDocumentsSimple(q, {
           platform,
-          limit: 100,
+          limit: 10000, // 충분히 큰 수
           offset: 0
         });
 
@@ -255,14 +255,9 @@ export async function POST(req: Request) {
                 }
               }
               
-              // 최대 300개로 제한 (키워드 관련도 높은 것 우선)
-              // 키워드가 있는 문서만 선택했으므로 더 많이 처리 가능
-              const maxPoolSize = 300;
-              if (allDocs.length > maxPoolSize) {
-                allDocs = allDocs.slice(0, maxPoolSize);
-                debug.semanticPoolLimited = true;
-              }
+              // 제한 없이 모든 문서 처리
               debug.semanticPoolSize = allDocs.length;
+              debug.semanticPoolLimited = false;
               pool = allDocs.map((doc: DocRecord) => {
                 let snippet = doc.snippet || '';
                 if (doc.content) {
