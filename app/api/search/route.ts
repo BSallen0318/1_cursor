@@ -220,6 +220,22 @@ export async function POST(req: Request) {
               let allDocs = Array.from(uniqueMap.values())
                 .filter(doc => doc.content && doc.content.length > 50);
               
+              // 키워드 관련도 순으로 정렬 (제목 매칭 우선)
+              allDocs.sort((a, b) => {
+                let scoreA = 0;
+                let scoreB = 0;
+                
+                for (const kw of keywords) {
+                  const kwLower = kw.toLowerCase();
+                  if (a.title.toLowerCase().includes(kwLower)) scoreA += 10;
+                  if (b.title.toLowerCase().includes(kwLower)) scoreB += 10;
+                  if (a.content?.toLowerCase().includes(kwLower)) scoreA += 1;
+                  if (b.content?.toLowerCase().includes(kwLower)) scoreB += 1;
+                }
+                
+                return scoreB - scoreA; // 높은 점수 우선
+              });
+              
               // 키워드 매칭이 적으면 전체 content 문서 추가
               if (allDocs.length < 100) {
                 debug.semanticFallback = true;
@@ -237,7 +253,7 @@ export async function POST(req: Request) {
                 }
               }
               
-              // 최대 150개로 제한 (Gemini API 비용/시간 고려 - 속도 개선)
+              // 최대 150개로 제한 (키워드 관련도 높은 것 우선)
               allDocs = allDocs.slice(0, 150);
               debug.semanticPoolSize = allDocs.length;
               pool = allDocs.map((doc: DocRecord) => {
