@@ -170,35 +170,34 @@ export async function POST(req: Request) {
             const semanticStartTime = Date.now();
             const [qv] = await embedTexts([q]);
             
+            // 검색어에서 키워드 추출 (상위 스코프로 이동)
+            const stopWords = ['찾아', '찾아줘', '알려', '알려줘', '문서', '관련', '대한', '에서', '있는', '있었', '보여', '주세요'];
+            let keywords = q
+              .split(/[\s,.\-_]+/)
+              .map(k => k.replace(/[을를이가에서와과는도한줘]$/g, ''))
+              .filter(k => k.length >= 2)
+              .filter(k => !stopWords.includes(k))
+              .slice(0, 5);
+            
+            // 변형 키워드 추가
+            const expandedKeywords: string[] = [...keywords];
+            for (const kw of keywords) {
+              if (kw.length >= 4) {
+                expandedKeywords.push(kw.slice(0, 2));
+                if (kw.length >= 5) expandedKeywords.push(kw.slice(0, 3));
+              }
+            }
+            keywords = [...new Set(expandedKeywords)].slice(0, 5);
+            
+            console.log('🔍 확장된 키워드:', keywords);
+            debug.extractedKeywords = keywords;
+            
             // 결과가 적으면 키워드 추출 후 확장 검색
             let pool = filtered;
             if (filtered.length < 20) {
               debug.semanticExpandedSearch = true;
               
-              // 검색어에서 의미있는 키워드 추출 (불용어 제거)
-              const stopWords = ['찾아', '찾아줘', '알려', '알려줘', '문서', '관련', '대한', '에서', '있는', '있었', '보여', '주세요'];
-              let keywords = q
-                .split(/[\s,.\-_]+/) // 먼저 분리
-                .map(k => k.replace(/[을를이가에서와과는도한줘]$/g, '')) // 조사 제거
-                .filter(k => k.length >= 2)
-                .filter(k => !stopWords.includes(k)) // 불용어 제거
-                .slice(0, 5); // 상위 5개
-              
-              // 변형 키워드 추가 (예: "무인매장" → "무인" 포함)
-              const expandedKeywords: string[] = [...keywords];
-              for (const kw of keywords) {
-                if (kw.length >= 4) {
-                  // 앞 2글자 추가 (무인매장 → 무인)
-                  expandedKeywords.push(kw.slice(0, 2));
-                  // 앞 3글자 추가 (무인매장 → 무인매)
-                  if (kw.length >= 5) expandedKeywords.push(kw.slice(0, 3));
-                }
-              }
-              keywords = [...new Set(expandedKeywords)].slice(0, 5); // 중복 제거, 최대 5개
-              
-              console.log('🔍 확장된 키워드:', keywords);
-              
-              debug.extractedKeywords = keywords;
+              // 이미 위에서 keywords 추출 완료
               
               // 키워드로 DB 검색 (content가 있는 모든 문서 대상)
               let expandedDocs: DocRecord[] = [];
