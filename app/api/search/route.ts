@@ -255,9 +255,17 @@ export async function POST(req: Request) {
                 }
               }
               
-              // 제한 없이 모든 문서 처리
+              // Gemini 처리: 키워드 관련도 높은 상위 문서만 (Vercel 60초 제한)
+              // 하지만 DB 검색은 모든 문서 대상
+              const maxGeminiDocs = 150; // 약 60-90초 소요
+              if (allDocs.length > maxGeminiDocs) {
+                debug.semanticPoolLimited = true;
+                debug.semanticTotalFound = allDocs.length;
+                allDocs = allDocs.slice(0, maxGeminiDocs); // 키워드 점수 높은 순
+              } else {
+                debug.semanticPoolLimited = false;
+              }
               debug.semanticPoolSize = allDocs.length;
-              debug.semanticPoolLimited = false;
               pool = allDocs.map((doc: DocRecord) => {
                 let snippet = doc.snippet || '';
                 if (doc.content) {
