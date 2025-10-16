@@ -183,12 +183,12 @@ export async function POST(req: Request) {
               
               debug.extractedKeywords = keywords;
               
-              // 키워드로 DB 검색
+              // 키워드로 DB 검색 (content가 있는 모든 문서 대상)
               let expandedDocs: DocRecord[] = [];
               for (const keyword of keywords) {
                 const docs = await searchDocumentsSimple(keyword, {
                   platform,
-                  limit: 50,
+                  limit: 500,  // 키워드당 최대 500개
                   offset: 0
                 });
                 expandedDocs = expandedDocs.concat(docs);
@@ -199,7 +199,31 @@ export async function POST(req: Request) {
               for (const doc of expandedDocs) {
                 uniqueMap.set(doc.id, doc);
               }
-              const allDocs = Array.from(uniqueMap.values()).slice(0, 100);
+              
+              // content가 있는 문서만 선택
+              let allDocs = Array.from(uniqueMap.values())
+                .filter(doc => doc.content && doc.content.length > 50);
+              
+              // 키워드 매칭이 적으면 전체 content 문서 추가
+              if (allDocs.length < 100) {
+                debug.semanticFallback = true;
+                const allContentDocs = await searchDocumentsSimple('', {
+                  platform,
+                  limit: 500,
+                  offset: 0
+                });
+                // content가 있는 문서만 추가
+                for (const doc of allContentDocs) {
+                  if (doc.content && doc.content.length > 50 && !uniqueMap.has(doc.id)) {
+                    uniqueMap.set(doc.id, doc);
+                    allDocs.push(doc);
+                  }
+                }
+              }
+              
+              // 최대 300개로 제한 (Gemini API 비용/시간 고려)
+              allDocs = allDocs.slice(0, 300);
+              debug.semanticPoolSize = allDocs.length;
               pool = allDocs.map((doc: DocRecord) => {
                 let snippet = doc.snippet || '';
                 if (doc.content) {
