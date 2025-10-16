@@ -175,12 +175,14 @@ export async function POST(req: Request) {
             if (filtered.length < 20) {
               debug.semanticExpandedSearch = true;
               
-              // 검색어에서 의미있는 키워드 추출 (2글자 이상)
+              // 검색어에서 의미있는 키워드 추출 (불용어 제거)
+              const stopWords = ['찾아', '찾아줘', '알려', '알려줘', '문서', '관련', '대한', '에서', '있는', '있었', '보여', '주세요'];
               let keywords = q
                 .split(/[\s,.\-_]+/) // 먼저 분리
-                .map(k => k.replace(/[을를이가에서와과는도한]$/g, '')) // 각 단어의 조사 제거
+                .map(k => k.replace(/[을를이가에서와과는도한줘]$/g, '')) // 조사 제거
                 .filter(k => k.length >= 2)
-                .slice(0, 3); // 상위 3개만
+                .filter(k => !stopWords.includes(k)) // 불용어 제거
+                .slice(0, 5); // 상위 5개
               
               // 변형 키워드 추가 (예: "무인매장" → "무인" 포함)
               const expandedKeywords: string[] = [...keywords];
@@ -289,12 +291,26 @@ export async function POST(req: Request) {
               });
             }
             
+            // Gemini 입력: 제목 + content 핵심 부분
             const texts = pool.map((d: any) => {
               const titlePart = d.title || '';
-              const snippetPart = d.snippet || '';
-              // content를 더 많이 포함 (최대 5000자)
-              const contentPart = d.content ? d.content.slice(0, 5000) : '';
-              return `${titlePart} ${snippetPart} ${contentPart}`.trim();
+              // content에서 키워드 주변 텍스트 추출
+              let contentPart = '';
+              if (d.content) {
+                // 각 키워드 주변 500자씩 추출
+                for (const kw of keywords) {
+                  const lowerContent = d.content.toLowerCase();
+                  const idx = lowerContent.indexOf(kw);
+                  if (idx >= 0) {
+                    const start = Math.max(0, idx - 250);
+                    const end = Math.min(d.content.length, idx + 250);
+                    contentPart += d.content.slice(start, end) + ' ';
+                  }
+                }
+                // 키워드 없으면 앞부분
+                if (!contentPart) contentPart = d.content.slice(0, 2000);
+              }
+              return `제목: ${titlePart}\n내용: ${contentPart.slice(0, 3000)}`.trim();
             });
             
             const evs = await embedTexts(texts);
