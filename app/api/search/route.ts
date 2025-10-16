@@ -122,6 +122,51 @@ export async function POST(req: Request) {
           filtered = filtered.filter((d) => +new Date(d.updatedAt) >= cutoff);
         }
 
+        // 검색어 관련성 점수 계산 및 정렬
+        const computeTitleScore = (title: string, query: string): number => {
+          if (!query) return 0;
+          const lowerTitle = title.toLowerCase();
+          const lowerQuery = query.toLowerCase();
+          // 완전 일치
+          if (lowerTitle === lowerQuery) return 100;
+          // 시작 일치
+          if (lowerTitle.startsWith(lowerQuery)) return 50;
+          // 포함
+          if (lowerTitle.includes(lowerQuery)) return 30;
+          // 단어 매칭
+          const tokens = lowerQuery.split(/\s+/).filter(Boolean);
+          let matchCount = 0;
+          for (const tok of tokens) {
+            if (lowerTitle.includes(tok)) matchCount++;
+          }
+          return matchCount * 10;
+        };
+
+        const computeContentScore = (snippet: string, query: string): number => {
+          if (!query || !snippet) return 0;
+          const lowerSnippet = snippet.toLowerCase();
+          const lowerQuery = query.toLowerCase();
+          if (lowerSnippet.includes(lowerQuery)) return 10;
+          return 0;
+        };
+
+        // 점수 계산
+        filtered = filtered.map((d) => ({
+          ...d,
+          _titleScore: computeTitleScore(d.title, q),
+          _contentScore: computeContentScore(d.snippet, q),
+          _recency: new Date(d.updatedAt).getTime()
+        }));
+
+        // 정렬: 제목 매칭 > 내용 매칭 > 최신순
+        filtered.sort((a: any, b: any) => {
+          const titleDiff = b._titleScore - a._titleScore;
+          if (titleDiff !== 0) return titleDiff;
+          const contentDiff = b._contentScore - a._contentScore;
+          if (contentDiff !== 0) return contentDiff;
+          return b._recency - a._recency;
+        });
+
         // 페이지네이션
         const total = filtered.length;
         const start = Math.max(0, (page - 1) * size);
