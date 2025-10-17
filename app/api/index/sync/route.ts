@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { bulkUpsertDocuments, setMetadata, getDocumentCount, clearDocumentsByPlatform, initSchema, type DocRecord, getMetadata } from '@/lib/db';
+import { bulkUpsertDocuments, setMetadata, getDocumentCount, initSchema, type DocRecord, getMetadata } from '@/lib/db';
 import { driveSearchSharedDrivesEx, driveSearchSharedWithMeByText, driveSearchAggregate, driveSearchByFolderName, driveCrawlAllAccessibleFiles, driveResolvePaths } from '@/lib/drive';
 import { figmaListProjectFiles, figmaListTeamProjects, figmaAutoDiscoverTeamProjectIds } from '@/lib/api';
 
@@ -116,16 +116,14 @@ export async function POST(req: Request) {
           indexed_at: Date.now()
         }));
 
-        // 전체 색인일 때는 기존 문서 삭제 후 재색인 (삭제된 문서 제거, 내 드라이브 제거)
-        // 추가 색인일 때는 기존 데이터 유지하며 추가
+        // 전체 색인, 추가 색인 모두 기존 데이터 유지하며 추가/업데이트
+        // 여러 사용자가 색인하여 문서를 누적하는 방식
         if (!incremental || !modifiedTimeAfter) {
-          console.log(`📂 Drive 전체 색인: 기존 문서 삭제 후 재색인...`);
-          await clearDocumentsByPlatform('drive');
-          await bulkUpsertDocuments(docRecords);
+          console.log(`📂 Drive 전체 색인: 모든 문서 upsert (기존 데이터 유지)...`);
         } else {
-          console.log(`📂 Drive 추가 색인: 기존 데이터 유지, 새 문서만 추가...`);
-          await bulkUpsertDocuments(docRecords);
+          console.log(`📂 Drive 추가 색인: 새 문서만 추가...`);
         }
+        await bulkUpsertDocuments(docRecords);
         
         const count = await getDocumentCount('drive');
         
@@ -240,16 +238,13 @@ export async function POST(req: Request) {
             };
           });
 
-          // 전체 색인일 때는 기존 문서 삭제 후 재색인
-          // 추가 색인일 때는 기존 데이터 유지하며 추가
+          // 전체 색인, 추가 색인 모두 기존 데이터 유지하며 추가/업데이트
           if (!incremental || !lastSyncTime) {
-            console.log(`🎨 Figma 전체 색인: 기존 문서 삭제 후 재색인...`);
-            await clearDocumentsByPlatform('figma');
-            await bulkUpsertDocuments(docRecords);
+            console.log(`🎨 Figma 전체 색인: 모든 문서 upsert (기존 데이터 유지)...`);
           } else {
-            console.log(`🎨 Figma 추가 색인: 기존 데이터 유지, 새 문서만 추가...`);
-            await bulkUpsertDocuments(docRecords);
+            console.log(`🎨 Figma 추가 색인: 새 문서만 추가...`);
           }
+          await bulkUpsertDocuments(docRecords);
 
           const count = await getDocumentCount('figma');
           
@@ -340,17 +335,14 @@ export async function POST(req: Request) {
             };
           });
 
-          // 전체 색인일 때는 기존 문서 삭제 후 재색인
-          // 추가 색인일 때는 기존 데이터 유지하며 추가
+          // 전체 색인, 추가 색인 모두 기존 데이터 유지하며 추가/업데이트
           if (docRecords.length > 0) {
             if (!incremental || !updatedAfter) {
-              console.log(`📋 Jira 전체 색인: 기존 이슈 삭제 후 재색인...`);
-              await clearDocumentsByPlatform('jira');
-              await bulkUpsertDocuments(docRecords);
+              console.log(`📋 Jira 전체 색인: 모든 이슈 upsert (기존 데이터 유지)...`);
             } else {
-              console.log(`📋 Jira 추가 색인: 기존 데이터 유지, 새 이슈만 추가...`);
-              await bulkUpsertDocuments(docRecords);
+              console.log(`📋 Jira 추가 색인: 새 이슈만 추가...`);
             }
+            await bulkUpsertDocuments(docRecords);
           }
 
           const count = await getDocumentCount('jira');
