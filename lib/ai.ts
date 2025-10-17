@@ -205,3 +205,90 @@ export function cosineSimilarity(a: number[], b: number[]) {
   }
   return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
 }
+
+// Gemini에게 검색어에서 핵심 키워드만 추출 요청
+export async function extractKeywords(query: string): Promise<string[]> {
+  const provider = resolveProvider();
+  const DEBUG = process.env.AI_DEBUG === '1' || process.env.AI_DEBUG === 'true';
+  
+  const userPrompt = `다음 검색어에서 문서 검색에 필요한 핵심 키워드만 추출해주세요.
+
+규칙:
+1. "문서", "내용", "관련", "요청", "찾아", "알려", "보여" 같은 일반적인 단어는 제외
+2. 실제 검색 대상이 되는 고유명사, 주제, 개념만 추출
+3. 최대 5개까지만
+4. 각 키워드는 쉼표로 구분
+5. 다른 설명 없이 키워드만 출력
+
+검색어: ${query}
+
+출력 (키워드만):`;
+
+  if (provider === 'gemini') {
+    try {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 5_000);
+      const url = `${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+      
+      if (DEBUG) console.log('[Gemini] 키워드 추출 시작');
+      
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+          generationConfig: { 
+            temperature: 0.1,
+            maxOutputTokens: 100,
+            topP: 0.8,
+            topK: 20
+          }
+        }),
+        signal: ctrl.signal
+      });
+      clearTimeout(to);
+      
+      if (!res.ok) {
+        if (DEBUG) console.error('[Gemini] 키워드 추출 실패:', res.status);
+        return fallbackKeywordExtraction(query);
+      }
+      
+      const json: any = await res.json();
+      const textOut: string | undefined = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      if (typeof textOut === 'string' && textOut.trim()) {
+        // 쉼표로 구분된 키워드 파싱
+        const keywords = textOut.trim()
+          .split(/[,\n]+/)
+          .map(k => k.trim())
+          .filter(k => k.length >= 2)
+          .slice(0, 5);
+        
+        if (DEBUG) console.log('[Gemini] 추출된 키워드:', keywords);
+        return keywords;
+      }
+    } catch (err: any) {
+      if (DEBUG) console.error('[Gemini] 키워드 추출 예외:', err?.message);
+    }
+  }
+  
+  // Fallback: 기존 방식
+  return fallbackKeywordExtraction(query);
+}
+
+// Fallback 키워드 추출 (Gemini 실패 시)
+function fallbackKeywordExtraction(query: string): string[] {
+  const stopWords = [
+    '찾아', '찾아줘', '알려', '알려줘', '보여', '주세요',
+    '문서', '내용', '관련', '관련한', '대한', '에서', '있는', '있었', '있는지', '인지',
+    '요청', '요청서', '해줘', '달라', '달라는', '라는', '하는', '되는', '이는', '그',
+    '어떤', '어디', '무엇', '누구', '언제', '왜', '어떻게'
+  ];
+  
+  return query
+    .split(/[\s,.\-_]+/)
+    .map(k => k.replace(/[을를이가에서와과는도한줘를은]$/g, ''))
+    .filter(k => k.length >= 2)
+    .filter(k => !stopWords.includes(k))
+    .slice(0, 5);
+}

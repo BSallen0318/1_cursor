@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { DocItem, Platform, DocKind } from '@/types/platform';
 import { driveSearchAggregate, driveExportPlainText, driveSearchByFolderName, driveSearchSharedDrivesEx, driveSearchSharedWithMeByText, driveCrawlAllAccessibleFiles, driveResolvePaths } from '@/lib/drive';
 import { figmaCollectTextNodes, figmaListProjectFiles, figmaListTeamProjects, figmaAutoDiscoverTeamProjectIds } from '@/lib/api';
-import { embedTexts, cosineSimilarity, hasGemini, hasOpenAI } from '@/lib/ai';
+import { embedTexts, cosineSimilarity, hasGemini, hasOpenAI, extractKeywords } from '@/lib/ai';
 import { cacheGet, cacheSet } from '@/lib/utils';
 import { searchDocumentsSimple, getDocumentCount, type DocRecord } from '@/lib/db';
 
@@ -169,19 +169,8 @@ export async function POST(req: Request) {
             const semanticStartTime = Date.now();
             const [qv] = await embedTexts([q]);
             
-            // 검색어에서 키워드 추출 (상위 스코프로 이동)
-            const stopWords = [
-              '찾아', '찾아줘', '알려', '알려줘', '보여', '주세요',
-              '문서', '내용', '관련', '관련한', '대한', '에서', '있는', '있었', '있는지', '인지',
-              '요청', '요청서', '해줘', '달라', '달라는', '라는', '하는', '되는', '이는', '그',
-              '어떤', '어디', '무엇', '누구', '언제', '왜', '어떻게'
-            ];
-            let keywords = q
-              .split(/[\s,.\-_]+/)
-              .map(k => k.replace(/[을를이가에서와과는도한줘를은은는을]$/g, ''))
-              .filter(k => k.length >= 2)
-              .filter(k => !stopWords.includes(k))
-              .slice(0, 5);
+            // Gemini에게 핵심 키워드 추출 요청
+            let keywords = await extractKeywords(q);
             
             // 변형 키워드 추가 (스마트하게)
             const expandedKeywords: string[] = [...keywords];
