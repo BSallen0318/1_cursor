@@ -192,12 +192,15 @@ export async function POST(req: Request) {
               
               // 이미 위에서 keywords 추출 완료
               
-              // 키워드로 DB 검색 (content가 있는 모든 문서 대상)
+              // 키워드로 DB 검색 (전체 검색 대상을 200개로 제한)
               let expandedDocs: DocRecord[] = [];
+              const totalLimit = 200; // 전체 최대 200개
+              const limitPerKeyword = Math.floor(totalLimit / keywords.length);
+              
               for (const keyword of keywords) {
                 const docs = await searchDocumentsSimple(keyword, {
                   platform,
-                  limit: 100,  // 키워드당 최대 100개로 축소
+                  limit: limitPerKeyword,  // 키워드당 균등 분배
                   offset: 0
                 });
                 expandedDocs = expandedDocs.concat(docs);
