@@ -120,6 +120,13 @@ export default function SearchPage() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-950 dark:to-zinc-900">
       <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* 타이틀 */}
+        <div className="text-center py-4">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
+            VX archive
+          </h1>
+        </div>
+        
         {/* 검색창 - 맨 위 */}
         <div className="bg-white dark:bg-zinc-950 rounded-2xl shadow-lg border border-zinc-200 dark:border-zinc-800 p-6">
           <div className="space-y-3">

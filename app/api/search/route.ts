@@ -170,10 +170,15 @@ export async function POST(req: Request) {
             const [qv] = await embedTexts([q]);
             
             // 검색어에서 키워드 추출 (상위 스코프로 이동)
-            const stopWords = ['찾아', '찾아줘', '알려', '알려줘', '문서', '관련', '대한', '에서', '있는', '있었', '보여', '주세요', '관련한', '있는지', '인지', '내용'];
+            const stopWords = [
+              '찾아', '찾아줘', '알려', '알려줘', '보여', '주세요',
+              '문서', '내용', '관련', '관련한', '대한', '에서', '있는', '있었', '있는지', '인지',
+              '요청', '요청서', '해줘', '달라', '달라는', '라는', '하는', '되는', '이는', '그',
+              '어떤', '어디', '무엇', '누구', '언제', '왜', '어떻게'
+            ];
             let keywords = q
               .split(/[\s,.\-_]+/)
-              .map(k => k.replace(/[을를이가에서와과는도한줘]$/g, ''))
+              .map(k => k.replace(/[을를이가에서와과는도한줘를은은는을]$/g, ''))
               .filter(k => k.length >= 2)
               .filter(k => !stopWords.includes(k))
               .slice(0, 5);
@@ -308,8 +313,8 @@ export async function POST(req: Request) {
               sims[pool[i].id] = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
             }
             
-            // 의미 유사도로 필터링 (0.65 이상 - 더 엄격하게)
-            const threshold = 0.65;
+            // 의미 유사도로 필터링 (0.60 이상)
+            const threshold = 0.60;
             const similarDocs = pool.filter((d: any) => (sims[d.id] || 0) >= threshold);
             debug.semanticThreshold = threshold;
             
