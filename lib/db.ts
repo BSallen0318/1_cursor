@@ -375,26 +375,36 @@ export async function searchDocumentsSimple(query: string, options: {
       // 검색어 전체를 하나의 문자열로 결합 (완전 일치 확인용)
       const queryStr = patterns.map(p => p.replace(/%/g, '')).join(' ');
       
+      // 제목에 키워드가 있는지 확인
+      let titleHasKeyword = false;
+      
       // 제목 완전 일치 확인
       const titleMatchesExactly = title === queryStr || title.includes(queryStr);
       
       if (titleMatchesExactly) {
-        // 제목 완전 일치: 1000점
-        score += 1000;
+        // 제목 완전 일치: 10000점 (확실히 상위에)
+        score += 10000;
+        titleHasKeyword = true;
       } else {
-        // 제목 부분 일치: 키워드당 100점
+        // 제목 부분 일치: 키워드당 1000점
         for (const p of patterns) {
           const word = p.replace(/%/g, '');
-          if (title.includes(word)) score += 100;
+          if (title.includes(word)) {
+            score += 1000;
+            titleHasKeyword = true;
+          }
         }
       }
       
-      // content 매칭: 빈도당 1점, 최대 10점
-      for (const p of patterns) {
-        const word = p.replace(/%/g, '');
-        if (content.includes(word)) {
-          const count = (content.match(new RegExp(word, 'g')) || []).length;
-          score += Math.min(count * 1, 10);
+      // content 매칭: 제목에 키워드가 없으면 매우 낮은 점수
+      if (!titleHasKeyword) {
+        // content에만 있으면 최대 10점 (제목보다 훨씬 낮음)
+        for (const p of patterns) {
+          const word = p.replace(/%/g, '');
+          if (content.includes(word)) {
+            const count = (content.match(new RegExp(word, 'g')) || []).length;
+            score += Math.min(count * 1, 10);
+          }
         }
       }
       
