@@ -190,30 +190,54 @@ export async function POST(req: Request) {
             if (filtered.length < 20) {
               debug.semanticExpandedSearch = true;
               
-              // 사용자 제안 방식: 핵심 키워드로 한 번에 검색 → 관련 문서만 추리기 → 상세 분석
+              // 사용자 제안 방식: 메타데이터 OR 검색 → 상위 20개만 상세 분석
               
-              // 1단계: 모든 키워드를 한 번에 DB 검색 (AND 조건)
-              // searchDocumentsSimple이 이미 여러 키워드를 처리하고 _relevance 점수를 계산함
-              const keywordQuery = keywords.join(' ');
-              console.log('🔍 키워드 통합 검색:', keywordQuery);
+              console.log('🔍 키워드별 메타데이터 검색:', keywords);
               
-              let allDocs = await searchDocumentsSimple(keywordQuery, {
-                platform,
-                limit: 500,  // 넉넉하게 가져오기 (이미 키워드 매칭된 문서만)
-                offset: 0
+              // 1단계: 각 키워드로 메타데이터에서 OR 검색 (빠름!)
+              const docMap = new Map<string, DocRecord>();
+              for (const keyword of keywords) {
+                const docs = await searchDocumentsSimple(keyword, {
+                  platform,
+                  limit: 100,  // 키워드당 최대 100개 (메타데이터 검색은 빠름)
+                  offset: 0
+                });
+                for (const doc of docs) {
+                  docMap.set(doc.id, doc);
+                }
+              }
+              
+              let allDocs = Array.from(docMap.values());
+              console.log(`📊 메타데이터 검색 결과: ${allDocs.length}개`);
+              
+              // 2단계: 키워드 관련도 점수 계산 (제목에 얼마나 많은 키워드 포함?)
+              const docsWithScore = allDocs.map(doc => {
+                let keywordCount = 0;
+                const titleLower = doc.title.toLowerCase();
+                for (const kw of keywords) {
+                  if (titleLower.includes(kw.toLowerCase())) {
+                    keywordCount++;
+                  }
+                }
+                return { doc, keywordCount };
               });
               
-              // content가 있는 문서만 선택
-              allDocs = allDocs.filter(doc => doc.content && doc.content.length > 50);
+              // 키워드가 많이 포함된 순서대로 정렬
+              docsWithScore.sort((a, b) => b.keywordCount - a.keywordCount);
               
-              // 이미 _relevance 점수로 정렬되어 있음
-              debug.keywordFilteredCount = allDocs.length;
+              // content가 있는 문서만 필터링
+              const docsWithContent = docsWithScore
+                .filter(d => d.doc.content && d.doc.content.length > 50)
+                .map(d => d.doc);
               
-              // 2단계: 키워드 관련도가 높은 상위 50개만 Gemini 상세 분석
-              const topDocs = allDocs.slice(0, 50);
+              console.log(`📝 content 있는 문서: ${docsWithContent.length}개`);
+              debug.keywordFilteredCount = docsWithContent.length;
+              
+              // 3단계: 상위 20개만 Gemini 상세 분석
+              const topDocs = docsWithContent.slice(0, 20);
               debug.semanticPoolSize = topDocs.length;
-              debug.semanticPoolLimited = allDocs.length > 50;
-              debug.semanticPoolTotal = allDocs.length;
+              debug.semanticPoolLimited = docsWithContent.length > 20;
+              debug.semanticPoolTotal = docsWithContent.length;
               pool = topDocs.map((doc: DocRecord) => {
                 let snippet = doc.snippet || '';
                 if (doc.content) {
