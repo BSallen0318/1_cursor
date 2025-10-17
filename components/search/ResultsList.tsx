@@ -43,7 +43,8 @@ export function ResultCard({ item, active, onClick, searchContent, query, keywor
     
     if (searchKeywords) {
       // Chrome의 Text Fragment를 사용하여 키워드 위치로 이동
-      targetUrl += `#:~:text=${encodeURIComponent(searchKeywords)}`;
+      const fragment = encodeURIComponent(searchKeywords);
+      targetUrl += `#:~:text=${fragment}`;
     }
   }
   
