@@ -385,6 +385,7 @@ export async function searchDocumentsSimple(query: string, options: {
         // 제목 완전 일치: 10000점 (확실히 상위에)
         score += 10000;
         titleHasKeyword = true;
+        console.log(`✅ 제목 완전 일치 (10000점): ${doc.title}`);
       } else {
         // 제목 부분 일치: 키워드당 1000점
         for (const p of patterns) {
@@ -393,6 +394,9 @@ export async function searchDocumentsSimple(query: string, options: {
             score += 1000;
             titleHasKeyword = true;
           }
+        }
+        if (titleHasKeyword) {
+          console.log(`📌 제목 부분 일치 (${score}점): ${doc.title}`);
         }
       }
       
@@ -406,10 +410,15 @@ export async function searchDocumentsSimple(query: string, options: {
             score += Math.min(count * 1, 10);
           }
         }
+        if (score > 0) {
+          console.log(`❌ Content만 (${score}점): ${doc.title}`);
+        }
       }
       
       return { ...doc, _relevance: score };
     });
+    
+    console.log(`📊 점수 계산 완료: ${rows.length}개 문서`);
     
     // 관련도 순으로 정렬
     rows.sort((a: any, b: any) => (b._relevance || 0) - (a._relevance || 0));

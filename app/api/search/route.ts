@@ -348,14 +348,19 @@ export async function POST(req: Request) {
           }
         }
 
-        // 정렬: _embedScore(Gemini 유사도) 높은 순서대로
+        // 정렬: DB에서 계산한 _relevance 우선, 그 다음 _embedScore
         filtered.sort((a: any, b: any) => {
-          // _embedScore가 있으면 무조건 최우선 (내용 찾기 체크 시)
-          const scoreA = a._embedScore || 0;
-          const scoreB = b._embedScore || 0;
-          if (scoreB !== scoreA) return scoreB - scoreA; // 점수 높은 순
+          // DB _relevance가 있으면 최우선 (제목 가중치 10000점)
+          const relevanceA = a._relevance || 0;
+          const relevanceB = b._relevance || 0;
+          if (relevanceB !== relevanceA) return relevanceB - relevanceA;
           
-          // _embedScore가 같으면 기존 방식
+          // _embedScore가 있으면 다음 우선 (Gemini 유사도)
+          const embedA = a._embedScore || 0;
+          const embedB = b._embedScore || 0;
+          if (embedB !== embedA) return embedB - embedA;
+          
+          // 나머지
           const titleDiff = b._titleScore - a._titleScore;
           if (titleDiff !== 0) return titleDiff;
           const contentDiff = b._contentScore - a._contentScore;
