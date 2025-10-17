@@ -197,7 +197,7 @@ export async function POST(req: Request) {
               for (const keyword of keywords) {
                 const docs = await searchDocumentsSimple(keyword, {
                   platform,
-                  limit: 500,  // 키워드당 최대 500개
+                  limit: 100,  // 키워드당 최대 100개로 축소
                   offset: 0
                 });
                 expandedDocs = expandedDocs.concat(docs);
@@ -249,10 +249,10 @@ export async function POST(req: Request) {
                 }
               }
               
-              // Gemini 처리: 상위 200개로 제한 (속도와 정확도 균형)
-              const topDocs = allDocs.slice(0, 200);
+              // Gemini 처리: 상위 50개로 제한 (속도와 정확도 균형)
+              const topDocs = allDocs.slice(0, 50);
               debug.semanticPoolSize = topDocs.length;
-              debug.semanticPoolLimited = allDocs.length > 200;
+              debug.semanticPoolLimited = allDocs.length > 50;
               debug.semanticPoolTotal = allDocs.length;
               pool = topDocs.map((doc: DocRecord) => {
                 let snippet = doc.snippet || '';
