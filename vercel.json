@@ -7,6 +7,11 @@
   "regions": ["icn1"],
   "env": {
     "NODE_VERSION": "20"
+  },
+  "functions": {
+    "app/api/index/sync/route.ts": {
+      "maxDuration": 300
+    }
   }
 }
 
