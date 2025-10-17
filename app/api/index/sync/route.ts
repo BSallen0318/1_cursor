@@ -43,12 +43,12 @@ export async function POST(req: Request) {
           console.log('🔄 Drive 전체 색인 시작...');
         }
         
-        // 모든 방법으로 파일 수집 (타임아웃 방지를 위해 제한)
+        // 모든 방법으로 파일 수집 (최대한 많이)
         const [swm, sdx, agg, crawl] = await Promise.all([
-          driveSearchSharedWithMeByText(driveTokens, '', 300).catch(() => ({ files: [] })),
-          driveSearchSharedDrivesEx(driveTokens, '', 300).catch(() => ({ files: [] })),
-          driveSearchAggregate(driveTokens, '', 'both', 300).catch(() => ({ files: [] })),
-          driveCrawlAllAccessibleFiles(driveTokens, 1000, modifiedTimeAfter).catch(() => ({ files: [] })) // 2000 → 1000
+          driveSearchSharedWithMeByText(driveTokens, '', 500).catch(() => ({ files: [] })),
+          driveSearchSharedDrivesEx(driveTokens, '', 500).catch(() => ({ files: [] })),
+          driveSearchAggregate(driveTokens, '', 'both', 500).catch(() => ({ files: [] })),
+          driveCrawlAllAccessibleFiles(driveTokens, 2000, modifiedTimeAfter).catch(() => ({ files: [] }))
         ]);
 
         // 추가 폴더
