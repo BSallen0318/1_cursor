@@ -286,17 +286,22 @@ export async function POST(req: Request) {
               sims[pool[i].id] = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
             }
             
-            // 의미 유사도로 필터링 (0.60 이상)
-            const threshold = 0.60;
-            const similarDocs = pool.filter((d: any) => (sims[d.id] || 0) >= threshold);
-            debug.semanticThreshold = threshold;
+            // 의미 유사도 점수 부여 (모든 문서에 점수 부여, threshold 없음)
+            for (const d of pool as any[]) {
+              d._embedScore = (sims[d.id] || 0) * 1000; // 1000배로 증폭
+            }
+            
+            // 점수 높은 순으로 정렬
+            pool.sort((a: any, b: any) => (b._embedScore || 0) - (a._embedScore || 0));
             
             // 상위 점수 로깅
             const topScores = pool
-              .map((d: any) => ({ title: d.title, score: sims[d.id] || 0 }))
-              .sort((a, b) => b.score - a.score)
-              .slice(0, 10);
+              .slice(0, 10)
+              .map((d: any) => ({ title: d.title, score: (d._embedScore || 0) / 1000 }));
             debug.topSemanticScores = topScores;
+            
+            // 모든 문서를 결과에 포함 (threshold 제거)
+            const similarDocs = pool;
             
             // 기존 filtered와 병합
             const mergedMap = new Map();
@@ -315,18 +320,20 @@ export async function POST(req: Request) {
             debug.semanticTime = Date.now() - semanticStartTime;
             debug.semanticCount = Object.keys(sims).length;
             debug.semanticMatches = similarDocs.length;
+            debug.extractedKeywords = keywords; // 프론트엔드로 키워드 전달
           } catch (e: any) {
             debug.semanticError = e?.message;
           }
         }
 
-        // 정렬: 의미 유사도 > 제목 매칭 > 내용 매칭 > 최신순
+        // 정렬: _embedScore(Gemini 유사도) 높은 순서대로
         filtered.sort((a: any, b: any) => {
-          // 의미 유사도가 있으면 우선 (Gemini 사용 시)
-          if (a._embedScore !== undefined && b._embedScore !== undefined) {
-            const embedDiff = b._embedScore - a._embedScore;
-            if (Math.abs(embedDiff) > 10) return embedDiff;  // 10점 차이 이상이면 의미 유사도 우선
-          }
+          // _embedScore가 있으면 무조건 최우선 (내용 찾기 체크 시)
+          const scoreA = a._embedScore || 0;
+          const scoreB = b._embedScore || 0;
+          if (scoreB !== scoreA) return scoreB - scoreA; // 점수 높은 순
+          
+          // _embedScore가 같으면 기존 방식
           const titleDiff = b._titleScore - a._titleScore;
           if (titleDiff !== 0) return titleDiff;
           const contentDiff = b._contentScore - a._contentScore;

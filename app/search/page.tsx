@@ -292,7 +292,7 @@ export default function SearchPage() {
                     const r = await fetch(`/api/docs/${id}?q=${encodeURIComponent(q)}`, { credentials: 'include' });
                     const payload = await r.json();
                     setSelected(payload);
-                  }} searchContent={lastSearchUsedContent} query={q} />
+                  }} searchContent={lastSearchUsedContent} query={q} keywords={data?.debug?.extractedKeywords} />
                 )}
                 {!loading && data && !lastSearchUsedContent && (
                   <div className="flex items-center gap-3 mt-6 justify-center">

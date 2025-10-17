@@ -29,16 +29,22 @@ function getPlatformColor(platform: string): string {
   }
 }
 
-export function ResultCard({ item, active, onClick, searchContent, query }: { item: DocItem; active?: boolean; onClick?: () => void; searchContent?: boolean; query?: string }) {
+export function ResultCard({ item, active, onClick, searchContent, query, keywords }: { item: DocItem; active?: boolean; onClick?: () => void; searchContent?: boolean; query?: string; keywords?: string[] }) {
   const platformIcon = getPlatformIcon(item.platform);
   const platformColor = getPlatformColor(item.platform);
   
   // 즉시 이동 URL 생성
   let targetUrl = (item as any).url || `/docs/${item.id}`;
-  if (searchContent && query) {
-    // Chrome의 Text Fragment를 사용하여 검색어 위치로 이동
-    const keywords = query.split(/[\s,.\-_]+/).slice(0, 3).join(',');
-    targetUrl += `#:~:text=${encodeURIComponent(keywords)}`;
+  if (searchContent) {
+    // Gemini가 추출한 핵심 키워드 또는 원본 쿼리 사용
+    const searchKeywords = keywords && keywords.length > 0 
+      ? keywords.slice(0, 3).join(',')
+      : query?.split(/[\s,.\-_]+/).slice(0, 3).join(',') || '';
+    
+    if (searchKeywords) {
+      // Chrome의 Text Fragment를 사용하여 키워드 위치로 이동
+      targetUrl += `#:~:text=${encodeURIComponent(searchKeywords)}`;
+    }
   }
   
   return (
@@ -70,12 +76,12 @@ export function ResultCard({ item, active, onClick, searchContent, query }: { it
   );
 }
 
-export function ResultsList({ items, activeId, onSelect, searchContent, query }: { items: DocItem[]; activeId?: string; onSelect?: (id: string) => void; searchContent?: boolean; query?: string }) {
+export function ResultsList({ items, activeId, onSelect, searchContent, query, keywords }: { items: DocItem[]; activeId?: string; onSelect?: (id: string) => void; searchContent?: boolean; query?: string; keywords?: string[] }) {
   if (!items.length) return <div className="text-zinc-500">검색 결과가 없습니다.</div>;
   return (
     <ul className="grid gap-3">
       {items.map((it) => (
-        <ResultCard key={it.id} item={it} active={activeId === it.id} onClick={() => onSelect && onSelect(it.id)} searchContent={searchContent} query={query} />
+        <ResultCard key={it.id} item={it} active={activeId === it.id} onClick={() => onSelect && onSelect(it.id)} searchContent={searchContent} query={query} keywords={keywords} />
       ))}
     </ul>
   );
