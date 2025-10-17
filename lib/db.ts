@@ -366,20 +366,35 @@ export async function searchDocumentsSimple(query: string, options: {
       });
     }
     
-    // 관련도 점수 계산 (키워드 점수 1/10로 낮춤)
+    // 관련도 점수 계산 (제목 가중치 강화)
     rows = rows.map(doc => {
       let score = 0;
       const title = doc.title.toLowerCase();
       const content = (doc.content || '').toLowerCase();
       
+      // 검색어 전체를 하나의 문자열로 결합 (완전 일치 확인용)
+      const queryStr = patterns.map(p => p.replace(/%/g, '')).join(' ');
+      
+      // 제목 완전 일치 확인
+      const titleMatchesExactly = title === queryStr || title.includes(queryStr);
+      
+      if (titleMatchesExactly) {
+        // 제목 완전 일치: 1000점
+        score += 1000;
+      } else {
+        // 제목 부분 일치: 키워드당 100점
+        for (const p of patterns) {
+          const word = p.replace(/%/g, '');
+          if (title.includes(word)) score += 100;
+        }
+      }
+      
+      // content 매칭: 빈도당 1점, 최대 10점
       for (const p of patterns) {
         const word = p.replace(/%/g, '');
-        // 제목 매칭 (100점 → 10점)
-        if (title.includes(word)) score += 10;
-        // content 매칭 (빈도당 5점, 최대 50점 → 빈도당 0.5점, 최대 5점)
         if (content.includes(word)) {
           const count = (content.match(new RegExp(word, 'g')) || []).length;
-          score += Math.min(count * 0.5, 5);
+          score += Math.min(count * 1, 10);
         }
       }
       

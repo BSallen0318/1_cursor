@@ -210,20 +210,28 @@ export async function POST(req: Request) {
               let allDocs = Array.from(docMap.values());
               console.log(`📊 메타데이터 검색 결과: ${allDocs.length}개`);
               
-              // 2단계: 키워드 관련도 점수 계산 (제목에 얼마나 많은 키워드 포함?)
+              // 2단계: 키워드 관련도 점수 계산 (제목 완전 일치 우선)
               const docsWithScore = allDocs.map(doc => {
-                let keywordCount = 0;
                 const titleLower = doc.title.toLowerCase();
+                const queryStr = keywords.join(' ').toLowerCase();
+                
+                // 제목 완전 일치: 1000점
+                if (titleLower === queryStr || titleLower.includes(queryStr)) {
+                  return { doc, score: 1000 };
+                }
+                
+                // 제목 부분 일치: 키워드당 100점
+                let score = 0;
                 for (const kw of keywords) {
                   if (titleLower.includes(kw.toLowerCase())) {
-                    keywordCount++;
+                    score += 100;
                   }
                 }
-                return { doc, keywordCount };
+                return { doc, score };
               });
               
-              // 키워드가 많이 포함된 순서대로 정렬
-              docsWithScore.sort((a, b) => b.keywordCount - a.keywordCount);
+              // 점수 높은 순서대로 정렬
+              docsWithScore.sort((a, b) => b.score - a.score);
               
               // content가 있는 문서만 필터링
               const docsWithContent = docsWithScore
