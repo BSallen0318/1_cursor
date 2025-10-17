@@ -169,8 +169,22 @@ export async function POST(req: Request) {
             const semanticStartTime = Date.now();
             const [qv] = await embedTexts([q]);
             
-            // Gemini에게 핵심 키워드 추출 요청
-            let keywords = await extractKeywords(q);
+            // 단순 키워드인지 복잡한 자연어인지 판단
+            const words = q.trim().split(/[\s,.\-_]+/).filter(w => w.length >= 2);
+            const isSimpleKeyword = words.length <= 2 && !/[찾아|알려|보여|주세요|해줘|관련|문서]/.test(q);
+            
+            let keywords: string[];
+            if (isSimpleKeyword) {
+              // 단순 키워드: 원본 그대로 사용
+              keywords = words;
+              console.log('🔍 단순 키워드 검색 (Gemini 건너뜀):', keywords);
+              debug.keywordExtractionMethod = 'simple';
+            } else {
+              // 복잡한 자연어: Gemini에게 핵심 키워드 추출 요청
+              keywords = await extractKeywords(q);
+              console.log('🔍 Gemini 키워드 추출:', keywords);
+              debug.keywordExtractionMethod = 'gemini';
+            }
             
             // 변형 키워드 추가 (스마트하게)
             const expandedKeywords: string[] = [...keywords];
@@ -182,7 +196,7 @@ export async function POST(req: Request) {
             }
             keywords = [...new Set(expandedKeywords)].slice(0, 5);
             
-            console.log('🔍 확장된 키워드:', keywords);
+            console.log('🔍 최종 키워드:', keywords);
             debug.extractedKeywords = keywords;
             
             // 결과가 적으면 키워드 추출 후 확장 검색
