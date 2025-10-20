@@ -45,18 +45,23 @@ export async function POST(req: Request) {
         
         // 모든 방법으로 파일 수집 (최대한 많이)
         const [swm, sdx, agg, crawl] = await Promise.all([
-          driveSearchSharedWithMeByText(driveTokens, '', 500).catch(() => ({ files: [] })),
-          driveSearchSharedDrivesEx(driveTokens, '', 500).catch(() => ({ files: [] })),
-          driveSearchAggregate(driveTokens, '', 'both', 500).catch(() => ({ files: [] })),
-          driveCrawlAllAccessibleFiles(driveTokens, 2000, modifiedTimeAfter).catch(() => ({ files: [] }))
+          driveSearchSharedWithMeByText(driveTokens, '', 2000).catch(() => ({ files: [] })),
+          driveSearchSharedDrivesEx(driveTokens, '', 2000).catch(() => ({ files: [] })),
+          driveSearchAggregate(driveTokens, '', 'both', 2000).catch(() => ({ files: [] })),
+          driveCrawlAllAccessibleFiles(driveTokens, 10000, modifiedTimeAfter).catch(() => ({ files: [] }))
         ]);
 
-        // 추가 폴더
-        const extraFolders = ['스크린 전략본부'];
+        // 추가 폴더 (이 폴더들은 재귀적으로 하위 파일 모두 수집)
+        const extraFolders = [
+          '스크린 전략본부',
+          'T3/Client',
+          '[T3/Client]',
+          '차세대기'
+        ];
         const extraResults: any[] = [];
         for (const folderName of extraFolders) {
           try {
-            const r = await driveSearchByFolderName(driveTokens, folderName, 300);
+            const r = await driveSearchByFolderName(driveTokens, folderName, 1000);
             if (r?.files?.length) extraResults.push(...r.files);
           } catch {}
         }
