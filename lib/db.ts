@@ -276,8 +276,13 @@ export async function searchDocumentsSimple(query: string, options: {
       .filter(w => w.length >= 2) // 2글자 이상만
       .filter(w => !stopWords.includes(w)); // stop words 제거
     
-    // 각 단어를 개별 패턴으로
-    const patterns = words.length > 0 ? words.map(w => `%${w}%`) : [`%${query.toLowerCase()}%`];
+    // SQL LIKE 특수문자 이스케이프 (_, %, \ 등)
+    const escapeLike = (str: string) => str.replace(/[_%\\]/g, '\\$&');
+    
+    // 각 단어를 개별 패턴으로 (이스케이프 적용)
+    const patterns = words.length > 0 
+      ? words.map(w => `%${escapeLike(w)}%`) 
+      : [`%${escapeLike(query.toLowerCase())}%`];
     
     let result;
     
@@ -295,10 +300,10 @@ export async function searchDocumentsSimple(query: string, options: {
         partialResult = await sql`
           SELECT * FROM documents
           WHERE (
-            LOWER(title) LIKE ${pattern}
-            OR LOWER(snippet) LIKE ${pattern}
-            OR LOWER(content) LIKE ${pattern}
-            OR LOWER(path) LIKE ${pattern}
+            LOWER(title) LIKE ${pattern} ESCAPE '\'
+            OR LOWER(snippet) LIKE ${pattern} ESCAPE '\'
+            OR LOWER(content) LIKE ${pattern} ESCAPE '\'
+            OR LOWER(path) LIKE ${pattern} ESCAPE '\'
           )
           AND platform = ${options.platform}
           AND kind = ${options.kind}
@@ -308,10 +313,10 @@ export async function searchDocumentsSimple(query: string, options: {
         partialResult = await sql`
           SELECT * FROM documents
           WHERE (
-            LOWER(title) LIKE ${pattern}
-            OR LOWER(snippet) LIKE ${pattern}
-            OR LOWER(content) LIKE ${pattern}
-            OR LOWER(path) LIKE ${pattern}
+            LOWER(title) LIKE ${pattern} ESCAPE '\'
+            OR LOWER(snippet) LIKE ${pattern} ESCAPE '\'
+            OR LOWER(content) LIKE ${pattern} ESCAPE '\'
+            OR LOWER(path) LIKE ${pattern} ESCAPE '\'
           )
           AND platform = ${options.platform}
           AND (platform != 'drive' OR is_my_drive = FALSE)
@@ -320,10 +325,10 @@ export async function searchDocumentsSimple(query: string, options: {
         partialResult = await sql`
           SELECT * FROM documents
           WHERE (
-            LOWER(title) LIKE ${pattern}
-            OR LOWER(snippet) LIKE ${pattern}
-            OR LOWER(content) LIKE ${pattern}
-            OR LOWER(path) LIKE ${pattern}
+            LOWER(title) LIKE ${pattern} ESCAPE '\'
+            OR LOWER(snippet) LIKE ${pattern} ESCAPE '\'
+            OR LOWER(content) LIKE ${pattern} ESCAPE '\'
+            OR LOWER(path) LIKE ${pattern} ESCAPE '\'
           )
           AND kind = ${options.kind}
           AND (platform != 'drive' OR is_my_drive = FALSE)
@@ -332,10 +337,10 @@ export async function searchDocumentsSimple(query: string, options: {
         partialResult = await sql`
           SELECT * FROM documents
           WHERE (
-            LOWER(title) LIKE ${pattern}
-            OR LOWER(snippet) LIKE ${pattern}
-            OR LOWER(content) LIKE ${pattern}
-            OR LOWER(path) LIKE ${pattern}
+            LOWER(title) LIKE ${pattern} ESCAPE '\'
+            OR LOWER(snippet) LIKE ${pattern} ESCAPE '\'
+            OR LOWER(content) LIKE ${pattern} ESCAPE '\'
+            OR LOWER(path) LIKE ${pattern} ESCAPE '\'
           )
           AND (platform != 'drive' OR is_my_drive = FALSE)
         `;
