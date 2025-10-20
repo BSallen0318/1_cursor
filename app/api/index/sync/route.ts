@@ -43,11 +43,9 @@ export async function POST(req: Request) {
           console.log('🔄 Drive 전체 색인 시작...');
         }
         
-        // 모든 방법으로 파일 수집 (최대한 많이)
-        const [swm, sdx, agg, crawl] = await Promise.all([
-          driveSearchSharedWithMeByText(driveTokens, '', 2000).catch(() => ({ files: [] })),
-          driveSearchSharedDrivesEx(driveTokens, '', 2000).catch(() => ({ files: [] })),
-          driveSearchAggregate(driveTokens, '', 'both', 2000).catch(() => ({ files: [] })),
+        // 공유 드라이브 수집에 집중 (내 드라이브는 어차피 검색에서 제외됨)
+        const [sdx, crawl] = await Promise.all([
+          driveSearchSharedDrivesEx(driveTokens, '', 10000).catch(() => ({ files: [] })),
           driveCrawlAllAccessibleFiles(driveTokens, 10000, modifiedTimeAfter).catch(() => ({ files: [] }))
         ]);
 
@@ -68,13 +66,11 @@ export async function POST(req: Request) {
 
         // 중복 제거 병합
         const mergedMap = new Map<string, any>();
-        for (const it of (swm.files || [])) if (it?.id) mergedMap.set(it.id, it);
         for (const it of (sdx.files || [])) if (it?.id) mergedMap.set(it.id, it);
-        for (const it of (agg.files || [])) if (it?.id) mergedMap.set(it.id, it);
         for (const it of (crawl.files || [])) if (it?.id) mergedMap.set(it.id, it);
         for (const it of extraResults) if (it?.id) mergedMap.set(it.id, it);
 
-        // 폴더만 제외 (공유 드라이브 + 나와 공유됨 모두 색인)
+        // 폴더만 제외 (공유 드라이브 집중 수집)
         const files = Array.from(mergedMap.values()).filter(
           (f: any) => f.mimeType !== 'application/vnd.google-apps.folder'
         );
