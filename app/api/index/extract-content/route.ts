@@ -10,7 +10,36 @@ export async function POST(req: Request) {
   const driveTokenCookie = cookieStore.get('drive_tokens')?.value;
   
   const body = await req.json().catch(() => ({}));
-  const { batchSize = 300, platform = 'all' } = body;
+  const { batchSize = 300, platform = 'all', force = false, reset = false } = body;
+  
+  // reset=true: 기존 추출된 content를 전부 NULL로 초기화 (처음부터 다시 추출)
+  if (reset) {
+    try {
+      if (platform === 'all' || platform === 'drive') {
+        await sql`UPDATE documents SET content = NULL WHERE platform = 'drive'`;
+        console.log('🔄 Drive content 초기화 완료');
+      }
+      if (platform === 'all' || platform === 'figma') {
+        await sql`UPDATE documents SET content = NULL WHERE platform = 'figma'`;
+        console.log('🔄 Figma content 초기화 완료');
+      }
+      if (platform === 'all' || platform === 'jira') {
+        await sql`UPDATE documents SET content = NULL WHERE platform = 'jira'`;
+        console.log('🔄 Jira content 초기화 완료');
+      }
+      
+      return NextResponse.json({
+        success: true,
+        message: 'Content 초기화 완료. 이제 추출을 다시 시작하세요.',
+        reset: true
+      });
+    } catch (e: any) {
+      return NextResponse.json({
+        success: false,
+        error: e?.message || 'Content 초기화 실패'
+      }, { status: 500 });
+    }
+  }
 
   const result: any = {
     success: false,
@@ -28,7 +57,19 @@ export async function POST(req: Request) {
       const driveTokens = JSON.parse(Buffer.from(driveTokenCookie, 'base64').toString('utf-8'));
       
       // content가 null인 문서 중 Google Docs, Sheets, Slides만 가져오기
-      const docsToExtract = await sql`
+      // force=true 시 이미 추출된 문서도 다시 추출 (50,000자 → 200,000자 업그레이드)
+      const docsToExtract = force ? await sql`
+        SELECT id, mime_type, platform
+        FROM documents
+        WHERE platform = 'drive'
+          AND (
+            mime_type = 'application/vnd.google-apps.document' OR
+            mime_type = 'application/vnd.google-apps.spreadsheet' OR
+            mime_type = 'application/vnd.google-apps.presentation'
+          )
+        ORDER BY updated_at DESC
+        LIMIT ${batchSize}
+      ` : await sql`
         SELECT id, mime_type, platform
         FROM documents
         WHERE platform = 'drive'
@@ -58,7 +99,7 @@ export async function POST(req: Request) {
               // DB 업데이트
               await sql`
                 UPDATE documents
-                SET content = ${content.slice(0, 50000)},
+                SET content = ${content.slice(0, 200000)},
                     snippet = ${content.slice(0, 200)}
                 WHERE id = ${doc.id}
               `;
@@ -128,7 +169,13 @@ export async function POST(req: Request) {
         }
 
         if (figmaToken) {
-          const docsToExtract = await sql`
+          const docsToExtract = force ? await sql`
+            SELECT id, platform
+            FROM documents
+            WHERE platform = 'figma'
+            ORDER BY updated_at DESC
+            LIMIT ${Math.floor(batchSize / 3)}
+          ` : await sql`
             SELECT id, platform
             FROM documents
             WHERE platform = 'figma'
@@ -153,7 +200,7 @@ export async function POST(req: Request) {
                 if (texts.trim().length > 0) {
                   await sql`
                     UPDATE documents
-                    SET content = ${texts.slice(0, 50000)},
+                    SET content = ${texts.slice(0, 200000)},
                         snippet = ${texts.slice(0, 200)}
                     WHERE id = ${doc.id}
                   `;

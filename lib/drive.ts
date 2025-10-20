@@ -372,10 +372,14 @@ export async function driveExportSlidesText(tokens: DriveTokens, fileId: string)
   try {
     const pres = await slides.presentations.get({ presentationId: fileId });
     const doc: any = pres.data || {};
-    const pages: any[] = (doc.slides || []).slice(0, 7); // 앞 7페이지까지만 사용해 입력 길이/속도 최적화
+    const pages: any[] = (doc.slides || []); // 전체 페이지 처리
     const chunks: string[] = [];
+    // PostgreSQL TEXT는 1GB까지 가능하지만, 검색 성능과 AI 임베딩 효율을 위해 제한
+    // 평균 슬라이드 1페이지당 ~500자 기준, 200,000자면 약 400페이지 커버
+    const MAX_CONTENT_LENGTH = 200000;
+    let totalLength = 0;
 
-    function collectFromPage(page: any) {
+    function collectFromPage(page: any): boolean {
       const elems: any[] = (page?.pageElements || []) as any[];
       for (const el of elems) {
         const shape = el?.shape;
@@ -386,15 +390,23 @@ export async function driveExportSlidesText(tokens: DriveTokens, fileId: string)
           const run = te?.textRun?.content;
           if (run && run.trim().length) texts.push(run.trim());
         }
-        if (texts.length) chunks.push(texts.join(' '));
+        if (texts.length) {
+          const pageText = texts.join(' ');
+          chunks.push(pageText);
+          totalLength += pageText.length;
+          // 50,000자 초과 시 중단
+          if (totalLength >= MAX_CONTENT_LENGTH) return false;
+        }
       }
+      return true;
     }
 
+    // 모든 페이지 처리 (길이 제한까지)
     for (const p of pages) {
-      collectFromPage(p);
+      if (!collectFromPage(p)) break;
       // 스피커 노트
       const notes = p?.slideProperties?.notesPage || p?.notesPage;
-      if (notes) collectFromPage(notes);
+      if (notes && !collectFromPage(notes)) break;
     }
 
     const joined = chunks.join('\n').replace(/\n{3,}/g, '\n\n');

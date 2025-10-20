@@ -74,6 +74,56 @@ export default function IntegrationsPage() {
     }
   };
 
+  const onResetAndExtract = async () => {
+    const confirmed = confirm(
+      '⚠️ 기존에 추출된 모든 내용을 초기화하고 처음부터 다시 추출합니다.\n' +
+      '(50,000자 → 200,000자 업그레이드)\n\n' +
+      '계속하시겠습니까?'
+    );
+    
+    if (!confirmed) return;
+    
+    setExtracting(true);
+    try {
+      // 1단계: 초기화
+      const resetRes = await fetch('/api/index/extract-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ reset: true, platform: 'all' })
+      });
+      const resetResult = await resetRes.json();
+      
+      if (!resetResult.success) {
+        alert(`❌ 초기화 실패: ${resetResult.error}`);
+        return;
+      }
+      
+      alert('✅ 초기화 완료! 이제 추출을 시작합니다...');
+      await loadExtractStatus();
+      
+      // 2단계: 추출 시작
+      const extractRes = await fetch('/api/index/extract-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ batchSize: 300, platform: 'all' })
+      });
+      const extractResult = await extractRes.json();
+      
+      if (extractResult.success) {
+        alert(`✅ 첫 배치 추출 완료!\n\n추출: ${extractResult.extracted}개\n실패: ${extractResult.failed}개\n남은 문서: ${extractResult.remaining}개\n\n계속해서 "300개 내용 추출하기" 버튼을 반복 클릭하세요.`);
+        await loadExtractStatus();
+      } else {
+        alert(`❌ 추출 실패: ${extractResult.error}`);
+      }
+    } catch (e: any) {
+      alert(`❌ 오류 발생: ${e?.message || '알 수 없는 오류'}`);
+    } finally {
+      setExtracting(false);
+    }
+  };
+
   useEffect(() => { 
     load();
     loadIndexStatus();
@@ -362,16 +412,31 @@ export default function IntegrationsPage() {
               </div>
             )}
 
-            <button
-              onClick={onExtractContent}
-              disabled={extracting || (extractStatus?.drive?.remaining === 0 && extractStatus?.figma?.remaining === 0)}
-              className="w-full h-14 px-6 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {extracting ? '⏳ 추출 중...' : '📄 300개 내용 추출하기'}
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={onExtractContent}
+                disabled={extracting || (extractStatus?.drive?.remaining === 0 && extractStatus?.figma?.remaining === 0)}
+                className="flex-1 h-14 px-6 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {extracting ? '⏳ 추출 중...' : '📄 300개 내용 추출하기'}
+              </button>
+              
+              <button
+                onClick={onResetAndExtract}
+                disabled={extracting}
+                className="h-14 px-6 rounded-xl bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+              >
+                🔄 초기화 후 재추출
+              </button>
+            </div>
 
-            <div className="text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900 p-3 rounded-lg">
-              💡 색인 완료 후 이 버튼을 눌러 문서 내용을 추출하세요. 300개씩 추출되며, 원하는 만큼 반복해서 클릭할 수 있습니다.
+            <div className="space-y-2">
+              <div className="text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900 p-3 rounded-lg">
+                💡 색인 완료 후 이 버튼을 눌러 문서 내용을 추출하세요. 300개씩 추출되며, 원하는 만큼 반복해서 클릭할 수 있습니다.
+              </div>
+              <div className="text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg border border-orange-200 dark:border-orange-800">
+                🔄 <strong>초기화 후 재추출</strong>: 기존 추출된 내용을 모두 삭제하고 처음부터 다시 추출합니다. (50,000자 → 200,000자 업그레이드용)
+              </div>
             </div>
           </div>
         </div>

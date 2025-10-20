@@ -324,7 +324,7 @@ export async function POST(req: Request) {
               kind: 'issue',
               title: issue.fields.summary || 'Untitled Issue',
               snippet: description.slice(0, 200) || issue.fields.status?.name || '',
-              content: description.slice(0, 50000) || undefined,
+              content: description.slice(0, 200000) || undefined,
               url: `https://${credentials.domain}/browse/${issue.key}`,
               path: `${issue.fields.project?.key || 'JIRA'} / ${issue.key}`,
               owner_id: issue.fields.assignee?.accountId || issue.fields.reporter?.displayName || 'unknown',
