@@ -129,13 +129,9 @@ export async function POST(req: Request) {
         
         const count = await getDocumentCount('drive');
         
-        // 전체 색인일 때만 타임스탬프 업데이트 (추가 색인은 기존 타임스탬프 유지)
-        if (!incremental || !modifiedTimeAfter) {
-          await setMetadata('drive_last_sync', new Date().toISOString());
-          console.log('📅 Drive 색인 타임스탬프 업데이트');
-        } else {
-          console.log('📅 Drive 추가 색인 완료 (타임스탬프 유지)');
-        }
+        // 타임스탬프는 업데이트하지 않음 (계속 전체 범위에서 수집 가능하도록)
+        // 이유: 한 번에 2000~3000개만 수집하므로, 타임스탬프를 업데이트하면 오래된 파일은 영원히 못 찾음
+        console.log('📅 Drive 색인 완료 (타임스탬프 유지 - 다음 색인 시 계속 수집 가능)');
         
         results.platforms.drive = {
           success: true,
@@ -250,13 +246,8 @@ export async function POST(req: Request) {
 
           const count = await getDocumentCount('figma');
           
-          // 전체 색인일 때만 타임스탬프 업데이트
-          if (!incremental || !lastSyncTime) {
-            await setMetadata('figma_last_sync', new Date().toISOString());
-            console.log('📅 Figma 색인 타임스탬프 업데이트');
-          } else {
-            console.log('📅 Figma 추가 색인 완료 (타임스탬프 유지)');
-          }
+          // 타임스탬프는 업데이트하지 않음 (계속 전체 범위에서 수집 가능하도록)
+          console.log('📅 Figma 색인 완료 (타임스탬프 유지 - 다음 색인 시 계속 수집 가능)');
 
           results.platforms.figma = {
             success: true,
@@ -349,13 +340,8 @@ export async function POST(req: Request) {
 
           const count = await getDocumentCount('jira');
           
-          // 전체 색인일 때만 타임스탬프 업데이트
-          if (!incremental || !updatedAfter) {
-            await setMetadata('jira_last_sync', new Date().toISOString());
-            console.log('📅 Jira 색인 타임스탬프 업데이트');
-          } else {
-            console.log('📅 Jira 추가 색인 완료 (타임스탬프 유지)');
-          }
+          // 타임스탬프는 업데이트하지 않음 (계속 전체 범위에서 수집 가능하도록)
+          console.log('📅 Jira 색인 완료 (타임스탬프 유지 - 다음 색인 시 계속 수집 가능)');
 
           results.platforms.jira = {
             success: true,

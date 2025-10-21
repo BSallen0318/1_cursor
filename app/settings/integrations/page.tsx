@@ -330,14 +330,11 @@ export default function IntegrationsPage() {
             
             <div className="text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900 p-3 rounded-lg space-y-2">
               <div>
-                <strong>➕ 추가 색인</strong>: 마지막 전체 색인 시점 이후 수정된 문서만 추가 (빠름, 여러 사람이 번갈아 실행 가능)
-              </div>
-              <div>
-                <strong>🔄 전체 색인</strong>: 모든 문서를 다시 색인 (느림, 타임스탬프 갱신)
+                <strong>🔄 전체 색인</strong>: 최신 문서부터 약 2,000~3,000개 수집 (타임아웃 방지)
               </div>
               <div className="text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 p-2 rounded border border-orange-200 dark:border-orange-800">
-                💡 <strong>파일이 많으면 여러 번 클릭하세요!</strong><br />
-                한 번에 약 2,000~3,000개씩 수집됩니다. 전체 색인 버튼을 2~3번 반복 클릭하면 더 많은 파일을 수집할 수 있습니다.
+                💡 <strong>전체 색인과 추가 색인은 현재 동일하게 동작합니다.</strong><br />
+                한 번에 2,000~3,000개씩 최신 파일을 수집하며, 이미 색인된 파일은 업데이트됩니다.
               </div>
             </div>
           </div>
