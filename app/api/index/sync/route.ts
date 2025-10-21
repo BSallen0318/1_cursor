@@ -43,10 +43,11 @@ export async function POST(req: Request) {
           console.log('🔄 Drive 전체 색인 시작...');
         }
         
-        // 공유 드라이브 수집에 집중 (내 드라이브는 어차피 검색에서 제외됨)
+        // 공유 드라이브 수집 (타임아웃 방지를 위해 2000개씩 제한)
+        // 여러 번 반복 클릭하여 점진적으로 수집
         const [sdx, crawl] = await Promise.all([
-          driveSearchSharedDrivesEx(driveTokens, '', 10000).catch(() => ({ files: [] })),
-          driveCrawlAllAccessibleFiles(driveTokens, 10000, modifiedTimeAfter).catch(() => ({ files: [] }))
+          driveSearchSharedDrivesEx(driveTokens, '', 2000).catch(() => ({ files: [] })),
+          driveCrawlAllAccessibleFiles(driveTokens, 3000, modifiedTimeAfter).catch(() => ({ files: [] }))
         ]);
 
         // 추가 폴더 (이 폴더들은 재귀적으로 하위 파일 모두 수집)
@@ -59,7 +60,7 @@ export async function POST(req: Request) {
         const extraResults: any[] = [];
         for (const folderName of extraFolders) {
           try {
-            const r = await driveSearchByFolderName(driveTokens, folderName, 1000);
+            const r = await driveSearchByFolderName(driveTokens, folderName, 500);
             if (r?.files?.length) extraResults.push(...r.files);
           } catch {}
         }
