@@ -10,7 +10,19 @@ export async function POST(req: Request) {
   const driveTokenCookie = cookieStore.get('drive_tokens')?.value;
   
   const body = await req.json().catch(() => ({}));
-  const { platforms = ['drive', 'figma', 'jira'], incremental = true } = body as { platforms?: string[]; incremental?: boolean };
+  const { 
+    platforms = ['drive', 'figma', 'jira'], 
+    incremental = true,
+    mode = 'normal',
+    folderName = '',
+    recursive = true
+  } = body as { 
+    platforms?: string[]; 
+    incremental?: boolean;
+    mode?: 'normal' | 'folder' | 'root';
+    folderName?: string;
+    recursive?: boolean;
+  };
 
   const results: any = {
     success: false,
@@ -29,52 +41,48 @@ export async function POST(req: Request) {
       try {
         const driveTokens = JSON.parse(Buffer.from(driveTokenCookie, 'base64').toString('utf-8'));
         
-        // 증분 색인 여부 확인
-        let modifiedTimeAfter: string | undefined = undefined;
-        if (incremental) {
+        let files: any[] = [];
+        
+        // 모드별 색인 방식
+        if (mode === 'folder' && folderName) {
+          // 특정 폴더 색인 (재귀)
+          console.log(`📁 폴더 색인 시작: ${folderName} (하위 모두 포함)...`);
+          const r = await driveSearchByFolderName(driveTokens, folderName, recursive ? 5000 : 500);
+          files = r?.files || [];
+          console.log(`📁 ${folderName}: ${files.length}개 수집`);
+          
+        } else if (mode === 'root') {
+          // 공유 문서함 루트만 (하위 폴더 제외)
+          console.log('📂 공유 문서함 루트 색인 시작 (폴더 제외)...');
+          const r = await driveSearchSharedDrivesEx(driveTokens, '', 1000);
+          files = (r?.files || []).filter((f: any) => !f.parents || f.parents.length === 0);
+          console.log(`📂 공유 문서함 루트: ${files.length}개 수집`);
+          
+        } else {
+          // 기본 모드: 추가 색인 (최근 수정된 문서만)
+          let modifiedTimeAfter: string | undefined = undefined;
           const lastSync = await getMetadata('drive_last_sync');
           if (lastSync) {
             modifiedTimeAfter = lastSync;
-            console.log(`🔄 Drive 증분 색인 시작 (${lastSync} 이후 수정된 문서)...`);
+            console.log(`➕ 추가 색인: ${lastSync} 이후 수정된 문서만...`);
           } else {
-            console.log('🔄 Drive 전체 색인 시작 (첫 색인)...');
+            console.log('➕ 추가 색인 (타임스탬프 없음, 최신 3000개)...');
           }
-        } else {
-          console.log('🔄 Drive 전체 색인 시작...');
-        }
-        
-        // 공유 드라이브 수집 (타임아웃 방지를 위해 2000개씩 제한)
-        // 여러 번 반복 클릭하여 점진적으로 수집
-        const [sdx, crawl] = await Promise.all([
-          driveSearchSharedDrivesEx(driveTokens, '', 2000).catch(() => ({ files: [] })),
-          driveCrawlAllAccessibleFiles(driveTokens, 3000, modifiedTimeAfter).catch(() => ({ files: [] }))
-        ]);
-
-        // 추가 폴더 (이 폴더들은 재귀적으로 하위 파일 모두 수집)
-        const extraFolders = [
-          '스크린 전략본부',
-          'T3/Client',
-          '[T3/Client]',
-          '차세대기'
-        ];
-        const extraResults: any[] = [];
-        for (const folderName of extraFolders) {
-          try {
-            const r = await driveSearchByFolderName(driveTokens, folderName, 500);
-            if (r?.files?.length) extraResults.push(...r.files);
-          } catch {}
+          
+          const [sdx, crawl] = await Promise.all([
+            driveSearchSharedDrivesEx(driveTokens, '', 2000).catch(() => ({ files: [] })),
+            driveCrawlAllAccessibleFiles(driveTokens, 3000, modifiedTimeAfter).catch(() => ({ files: [] }))
+          ]);
+          
+          const mergedMap = new Map<string, any>();
+          for (const it of (sdx.files || [])) if (it?.id) mergedMap.set(it.id, it);
+          for (const it of (crawl.files || [])) if (it?.id) mergedMap.set(it.id, it);
+          files = Array.from(mergedMap.values());
+          console.log(`➕ 추가 색인: ${files.length}개 수집`);
         }
 
-        // 중복 제거 병합
-        const mergedMap = new Map<string, any>();
-        for (const it of (sdx.files || [])) if (it?.id) mergedMap.set(it.id, it);
-        for (const it of (crawl.files || [])) if (it?.id) mergedMap.set(it.id, it);
-        for (const it of extraResults) if (it?.id) mergedMap.set(it.id, it);
-
-        // 폴더만 제외 (공유 드라이브 집중 수집)
-        const files = Array.from(mergedMap.values()).filter(
-          (f: any) => f.mimeType !== 'application/vnd.google-apps.folder'
-        );
+        // 폴더만 제외
+        files = files.filter((f: any) => f.mimeType !== 'application/vnd.google-apps.folder');
 
         console.log(`📂 Drive 파일 ${files.length}개 수집 완료`);
 
@@ -129,9 +137,13 @@ export async function POST(req: Request) {
         
         const count = await getDocumentCount('drive');
         
-        // 타임스탬프는 업데이트하지 않음 (계속 전체 범위에서 수집 가능하도록)
-        // 이유: 한 번에 2000~3000개만 수집하므로, 타임스탬프를 업데이트하면 오래된 파일은 영원히 못 찾음
-        console.log('📅 Drive 색인 완료 (타임스탬프 유지 - 다음 색인 시 계속 수집 가능)');
+        // 추가 색인일 때만 타임스탬프 업데이트
+        if (mode === 'normal') {
+          await setMetadata('drive_last_sync', new Date().toISOString());
+          console.log('📅 추가 색인 타임스탬프 업데이트');
+        } else {
+          console.log('📅 폴더 색인 완료 (타임스탬프 유지)');
+        }
         
         results.platforms.drive = {
           success: true,

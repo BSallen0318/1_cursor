@@ -136,7 +136,11 @@ export default function IntegrationsPage() {
     setStates((s) => ({ ...s, [p]: json }));
   };
 
-  const startSync = async (platforms: string[], incremental: boolean = true) => {
+  const startSync = async (
+    platforms: string[], 
+    mode: 'normal' | 'folder' | 'root' = 'normal',
+    folderName?: string
+  ) => {
     setSyncing(true);
     setSyncResult(null);
     try {
@@ -144,7 +148,13 @@ export default function IntegrationsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ platforms, incremental })
+        body: JSON.stringify({ 
+          platforms, 
+          incremental: true,
+          mode,
+          folderName,
+          recursive: true
+        })
       });
       const data = await res.json();
       setSyncResult(data);
@@ -310,31 +320,59 @@ export default function IntegrationsPage() {
           <h3 className="text-lg font-bold mb-4">🚀 색인 실행</h3>
           
           <div className="space-y-4">
-            {/* 색인 버튼 */}
-            <div className="flex gap-3">
+            {/* 폴더별 색인 버튼 */}
+            <div className="space-y-3">
+              <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">📁 폴더별 색인</div>
+              
               <button
-                onClick={() => startSync(['drive', 'figma', 'jira'], true)}
+                onClick={() => startSync(['drive'], 'root')}
                 disabled={syncing}
-                className="flex-1 h-14 px-6 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
               >
-                {syncing ? '⏳ 색인 중...' : '➕ 추가 색인'}
+                <span className="text-2xl">📂</span>
+                <div>
+                  <div className="font-bold">공유 문서함 (루트만)</div>
+                  <div className="text-xs opacity-80">하위 폴더 제외, 루트 파일만</div>
+                </div>
               </button>
+              
               <button
-                onClick={() => startSync(['drive', 'figma', 'jira'], false)}
+                onClick={() => startSync(['drive'], 'folder', '스크린 전략본부')}
                 disabled={syncing}
-                className="flex-1 h-14 px-6 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
               >
-                {syncing ? '⏳ 색인 중...' : '🔄 전체 색인'}
+                <span className="text-2xl">📁</span>
+                <div>
+                  <div className="font-bold">스크린 전략본부</div>
+                  <div className="text-xs opacity-80">전체 하위 포함 (최대 5000개)</div>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => startSync(['drive'], 'folder', '40.스크린기획팀/아카데미기획팀')}
+                disabled={syncing}
+                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
+              >
+                <span className="text-2xl">📁</span>
+                <div>
+                  <div className="font-bold">스크린기획팀</div>
+                  <div className="text-xs opacity-80">전체 하위 포함 (최대 5000개)</div>
+                </div>
               </button>
             </div>
             
-            <div className="text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-900 p-3 rounded-lg space-y-2">
-              <div>
-                <strong>🔄 전체 색인</strong>: 최신 문서부터 약 2,000~3,000개 수집 (타임아웃 방지)
-              </div>
-              <div className="text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 p-2 rounded border border-orange-200 dark:border-orange-800">
-                💡 <strong>전체 색인과 추가 색인은 현재 동일하게 동작합니다.</strong><br />
-                한 번에 2,000~3,000개씩 최신 파일을 수집하며, 이미 색인된 파일은 업데이트됩니다.
+            {/* 추가 색인 */}
+            <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800">
+              <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">➕ 자동 증분 색인</div>
+              <button
+                onClick={() => startSync(['drive', 'figma', 'jira'], 'normal')}
+                disabled={syncing}
+                className="w-full h-14 px-6 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {syncing ? '⏳ 색인 중...' : '➕ 추가 색인 (최근 수정 문서)'}
+              </button>
+              <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-2 bg-zinc-50 dark:bg-zinc-900 p-3 rounded-lg">
+                마지막 색인 시점 이후 추가/수정된 문서만 수집합니다.
               </div>
             </div>
           </div>
