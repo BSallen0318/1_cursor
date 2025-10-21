@@ -138,8 +138,10 @@ export default function IntegrationsPage() {
 
   const startSync = async (
     platforms: string[], 
-    mode: 'normal' | 'folder' | 'root' = 'normal',
-    folderName?: string
+    mode: 'normal' | 'folder' | 'root' | 'exclude' = 'normal',
+    folderName?: string,
+    subfolders?: string[],
+    excludeFolders?: string[]
   ) => {
     setSyncing(true);
     setSyncResult(null);
@@ -153,7 +155,9 @@ export default function IntegrationsPage() {
           incremental: true,
           mode,
           folderName,
-          recursive: true
+          recursive: true,
+          subfolders,
+          excludeFolders
         })
       });
       const data = await res.json();
@@ -325,18 +329,6 @@ export default function IntegrationsPage() {
               <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">📁 폴더별 색인</div>
               
               <button
-                onClick={() => startSync(['drive'], 'root')}
-                disabled={syncing}
-                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
-              >
-                <span className="text-2xl">📂</span>
-                <div>
-                  <div className="font-bold">공유 문서함 (루트만)</div>
-                  <div className="text-xs opacity-80">하위 폴더 제외, 루트 파일만</div>
-                </div>
-              </button>
-              
-              <button
                 onClick={() => startSync(['drive'], 'folder', '스크린 전략본부')}
                 disabled={syncing}
                 className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
@@ -349,14 +341,38 @@ export default function IntegrationsPage() {
               </button>
               
               <button
-                onClick={() => startSync(['drive'], 'folder', '40.스크린기획팀/아카데미기획팀')}
+                onClick={() => startSync(['drive'], 'folder', '40.스크린기획팀/아카데미기획팀', ['00.', '10.', '20.', '30.', '40.', '50.', '60.', '70.', '80.'])}
+                disabled={syncing}
+                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
+              >
+                <span className="text-2xl">📁</span>
+                <div>
+                  <div className="font-bold">스크린기획팀 파트1 (00-80)</div>
+                  <div className="text-xs opacity-80">00~80 하위 폴더 전체</div>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => startSync(['drive'], 'folder', '40.스크린기획팀/아카데미기획팀', ['81.', '82.', '90.', '100.', '110.', '120.', '200.', '999.'])}
                 disabled={syncing}
                 className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
               >
                 <span className="text-2xl">📁</span>
                 <div>
-                  <div className="font-bold">스크린기획팀</div>
-                  <div className="text-xs opacity-80">전체 하위 포함 (최대 5000개)</div>
+                  <div className="font-bold">스크린기획팀 파트2 (81-999)</div>
+                  <div className="text-xs opacity-80">81~999 하위 폴더 + 루트 파일</div>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => startSync(['drive'], 'exclude', '', [], ['스크린 전략본부'])}
+                disabled={syncing}
+                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
+              >
+                <span className="text-2xl">📂</span>
+                <div>
+                  <div className="font-bold">공유 문서함 (스크린전략본부 제외)</div>
+                  <div className="text-xs opacity-80">전체 수집 (최대 3000개)</div>
                 </div>
               </button>
             </div>

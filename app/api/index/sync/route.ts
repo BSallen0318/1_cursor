@@ -15,13 +15,17 @@ export async function POST(req: Request) {
     incremental = true,
     mode = 'normal',
     folderName = '',
-    recursive = true
+    recursive = true,
+    subfolders = [],
+    excludeFolders = []
   } = body as { 
     platforms?: string[]; 
     incremental?: boolean;
-    mode?: 'normal' | 'folder' | 'root';
+    mode?: 'normal' | 'folder' | 'root' | 'exclude';
     folderName?: string;
     recursive?: boolean;
+    subfolders?: string[];
+    excludeFolders?: string[];
   };
 
   const results: any = {
@@ -45,18 +49,71 @@ export async function POST(req: Request) {
         
         // 모드별 색인 방식
         if (mode === 'folder' && folderName) {
-          // 특정 폴더 색인 (재귀)
-          console.log(`📁 폴더 색인 시작: ${folderName} (하위 모두 포함)...`);
-          const r = await driveSearchByFolderName(driveTokens, folderName, recursive ? 5000 : 500);
-          files = r?.files || [];
-          console.log(`📁 ${folderName}: ${files.length}개 수집`);
+          // 특정 폴더 색인
+          if (subfolders && subfolders.length > 0) {
+            // 특정 하위 폴더들만 수집
+            console.log(`📁 폴더 색인 시작: ${folderName} - 하위 폴더 ${subfolders.length}개...`);
+            const allSubResults: any[] = [];
+            
+            // 하위 폴더들 수집
+            for (const subfolder of subfolders) {
+              try {
+                const fullPath = `${folderName}/${subfolder}`;
+                const r = await driveSearchByFolderName(driveTokens, fullPath, 500);
+                if (r?.files?.length) {
+                  console.log(`  📁 ${subfolder}: ${r.files.length}개`);
+                  allSubResults.push(...r.files);
+                }
+              } catch (e) {
+                console.log(`  ❌ ${subfolder} 실패`);
+              }
+            }
+            
+            // 81-999 파트인 경우 루트 파일도 추가
+            const isPart2 = subfolders.some(s => s.startsWith('81') || s.startsWith('82') || s.startsWith('90'));
+            if (isPart2) {
+              try {
+                // 부모 폴더의 바로 밑 파일들도 수집
+                const rootFiles = await driveSearchByFolderName(driveTokens, folderName, 100);
+                const directFiles = (rootFiles?.files || []).filter((f: any) => {
+                  // 파일이면서, 부모가 해당 폴더인 것만
+                  return f.mimeType !== 'application/vnd.google-apps.folder';
+                });
+                console.log(`  📄 루트 파일: ${directFiles.length}개`);
+                allSubResults.push(...directFiles);
+              } catch (e) {
+                console.log(`  ❌ 루트 파일 수집 실패`);
+              }
+            }
+            
+            files = allSubResults;
+            console.log(`📁 ${folderName} (${subfolders.length}개 하위${isPart2 ? ' + 루트 파일' : ''}): 총 ${files.length}개 수집`);
+          } else {
+            // 전체 폴더 재귀 수집
+            console.log(`📁 폴더 색인 시작: ${folderName} (하위 모두 포함)...`);
+            const r = await driveSearchByFolderName(driveTokens, folderName, recursive ? 5000 : 500);
+            files = r?.files || [];
+            console.log(`📁 ${folderName}: ${files.length}개 수집`);
+          }
           
-        } else if (mode === 'root') {
-          // 공유 문서함 루트만 (하위 폴더 제외)
-          console.log('📂 공유 문서함 루트 색인 시작 (폴더 제외)...');
-          const r = await driveSearchSharedDrivesEx(driveTokens, '', 1000);
-          files = (r?.files || []).filter((f: any) => !f.parents || f.parents.length === 0);
-          console.log(`📂 공유 문서함 루트: ${files.length}개 수집`);
+        } else if (mode === 'exclude') {
+          // 특정 폴더 제외하고 전체 수집
+          console.log(`📂 공유 문서함 전체 색인 (제외: ${excludeFolders.join(', ')})...`);
+          const [sdx, crawl] = await Promise.all([
+            driveSearchSharedDrivesEx(driveTokens, '', 2000).catch(() => ({ files: [] })),
+            driveCrawlAllAccessibleFiles(driveTokens, 3000).catch(() => ({ files: [] }))
+          ]);
+          const allFiles = [...(sdx.files || []), ...(crawl.files || [])];
+          
+          // 경로 정보 가져오기
+          const idToPath = await driveResolvePaths(driveTokens, allFiles.map((x: any) => ({ id: x.id, parents: x.parents })));
+          
+          // 제외 폴더 필터링
+          files = allFiles.filter((f: any) => {
+            const path = idToPath[f.id] || '';
+            return !excludeFolders.some(ex => path.includes(ex));
+          });
+          console.log(`📂 공유 문서함 (제외 적용): ${files.length}개 수집`);
           
         } else {
           // 기본 모드: 추가 색인 (최근 수정된 문서만)
