@@ -341,18 +341,6 @@ export default function IntegrationsPage() {
               </button>
               
               <button
-                onClick={() => startSync(['drive'], 'folder', 'T3/Client')}
-                disabled={syncing}
-                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
-              >
-                <span className="text-2xl">📁</span>
-                <div>
-                  <div className="font-bold">T3/Client (전체)</div>
-                  <div className="text-xs opacity-80">T3/Client 하위 모두 (최대 5000개)</div>
-                </div>
-              </button>
-              
-              <button
                 onClick={() => startSync(['drive'], 'root')}
                 disabled={syncing}
                 className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
