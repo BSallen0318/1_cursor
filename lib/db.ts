@@ -1,5 +1,8 @@
 import { sql } from '@vercel/postgres';
 
+// sql을 re-export
+export { sql };
+
 export interface DocRecord {
   id: string;
   platform: string;
