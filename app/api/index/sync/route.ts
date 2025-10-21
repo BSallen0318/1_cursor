@@ -19,7 +19,8 @@ export async function POST(req: Request) {
     subfolders = [],
     excludeFolders = [],
     forceFullIndex = false,
-    skipTimestampUpdate = false
+    skipTimestampUpdate = false,
+    yearRange = undefined
   } = body as { 
     platforms?: string[]; 
     incremental?: boolean;
@@ -30,6 +31,7 @@ export async function POST(req: Request) {
     excludeFolders?: string[];
     forceFullIndex?: boolean;
     skipTimestampUpdate?: boolean; // 타임스탬프를 업데이트하지 않고 계속 수집
+    yearRange?: { start: string; end: string }; // 연도 범위 필터 (예: 2015-01-01 ~ 2018-12-31)
   };
 
   const results: any = {
@@ -147,8 +149,8 @@ export async function POST(req: Request) {
             console.log('🔄 강제 전체 재색인: 모든 문서 다시 수집...');
           }
           
-          // 타임아웃 방지를 위해 배치 크기 축소
-          const batchLimit = forceFullIndex ? 1000 : 3000;
+          // 타임아웃 방지를 위해 배치 크기 축소 (연도 범위 필터 시 2000개)
+          const batchLimit = yearRange ? 2000 : (forceFullIndex ? 1000 : 3000);
           
           const [sdx, crawl] = await Promise.all([
             driveSearchSharedDrivesEx(driveTokens, '', Math.floor(batchLimit * 0.3)).catch(() => ({ files: [] })),
@@ -158,7 +160,21 @@ export async function POST(req: Request) {
           const mergedMap = new Map<string, any>();
           for (const it of (sdx.files || [])) if (it?.id) mergedMap.set(it.id, it);
           for (const it of (crawl.files || [])) if (it?.id) mergedMap.set(it.id, it);
-          files = Array.from(mergedMap.values());
+          let allFiles = Array.from(mergedMap.values());
+          
+          // 연도 범위 필터 적용
+          if (yearRange) {
+            const startDate = new Date(yearRange.start);
+            const endDate = new Date(yearRange.end);
+            allFiles = allFiles.filter((f: any) => {
+              if (!f.modifiedTime) return false;
+              const modDate = new Date(f.modifiedTime);
+              return modDate >= startDate && modDate <= endDate;
+            });
+            console.log(`📅 연도 필터 (${yearRange.start.slice(0,4)}~${yearRange.end.slice(0,4)}): ${allFiles.length}개`);
+          }
+          
+          files = allFiles;
           console.log(`➕ 추가 색인: ${files.length}개 수집`);
         }
 
