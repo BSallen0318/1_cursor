@@ -353,14 +353,14 @@ export default function IntegrationsPage() {
               </button>
               
               <button
-                onClick={() => startSync(['drive'], 'exclude', '', [], ['스크린 전략본부'])}
+                onClick={() => startSync(['drive'], 'root')}
                 disabled={syncing}
                 className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
               >
                 <span className="text-2xl">📂</span>
                 <div>
-                  <div className="font-bold">공유 문서함 (스크린전략본부 제외)</div>
-                  <div className="text-xs opacity-80">전체 수집 (최대 3000개)</div>
+                  <div className="font-bold">공유 문서함 (루트만)</div>
+                  <div className="text-xs opacity-80">하위 폴더 무시, 루트 파일만</div>
                 </div>
               </button>
             </div>

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { bulkUpsertDocuments, setMetadata, getDocumentCount, initSchema, type DocRecord, getMetadata } from '@/lib/db';
-import { driveSearchSharedDrivesEx, driveSearchSharedWithMeByText, driveSearchAggregate, driveSearchByFolderName, driveCrawlAllAccessibleFiles, driveResolvePaths } from '@/lib/drive';
+import { driveSearchSharedDrivesEx, driveSearchSharedWithMeByText, driveSearchAggregate, driveSearchByFolderName, driveCrawlAllAccessibleFiles, driveResolvePaths, createOAuthClient } from '@/lib/drive';
 import { figmaListProjectFiles, figmaListTeamProjects, figmaAutoDiscoverTeamProjectIds } from '@/lib/api';
 
 // 색인 동기화 API
@@ -96,24 +96,43 @@ export async function POST(req: Request) {
             console.log(`📁 ${folderName}: ${files.length}개 수집`);
           }
           
-        } else if (mode === 'exclude') {
-          // 특정 폴더 제외하고 전체 수집
-          console.log(`📂 공유 문서함 전체 색인 (제외: ${excludeFolders.join(', ')})...`);
-          const [sdx, crawl] = await Promise.all([
-            driveSearchSharedDrivesEx(driveTokens, '', 2000).catch(() => ({ files: [] })),
-            driveCrawlAllAccessibleFiles(driveTokens, 3000).catch(() => ({ files: [] }))
-          ]);
-          const allFiles = [...(sdx.files || []), ...(crawl.files || [])];
+        } else if (mode === 'root') {
+          // 공유 문서함 루트 파일만 (하위 폴더 무시)
+          console.log(`📂 공유 문서함 루트 파일만 수집 (하위 폴더 무시)...`);
+          const google = await import('googleapis').then(m => (m as any).google);
+          const oauth2 = await createOAuthClient();
+          oauth2.setCredentials(driveTokens);
+          const drive = google.drive({ version: 'v3', auth: oauth2 });
           
-          // 경로 정보 가져오기
-          const idToPath = await driveResolvePaths(driveTokens, allFiles.map((x: any) => ({ id: x.id, parents: x.parents })));
+          // 공유 드라이브 목록 가져오기
+          const drivesRes = await drive.drives.list({ pageSize: 100 }).catch(() => ({ data: { drives: [] } }));
+          const drives: Array<{ id: string; name: string }> = (drivesRes.data?.drives || []) as any;
           
-          // 제외 폴더 필터링
-          files = allFiles.filter((f: any) => {
-            const path = idToPath[f.id] || '';
-            return !excludeFolders.some(ex => path.includes(ex));
-          });
-          console.log(`📂 공유 문서함 (제외 적용): ${files.length}개 수집`);
+          const rootFiles: any[] = [];
+          for (const sharedDrive of drives) {
+            try {
+              // 각 공유 드라이브의 루트에 있는 파일만 가져오기 (depth 1)
+              const r = await drive.files.list({
+                corpora: 'drive',
+                driveId: sharedDrive.id,
+                q: `trashed = false and mimeType != 'application/vnd.google-apps.folder'`,
+                pageSize: 100,
+                includeItemsFromAllDrives: true,
+                supportsAllDrives: true,
+                fields: 'files(id,driveId,name,mimeType,modifiedTime,owners,webViewLink,iconLink,parents)'
+              });
+              const driveRootFiles = (r.data?.files || []).filter((f: any) => {
+                // parents가 없거나 1개인 파일만 (루트 레벨)
+                return !f.parents || f.parents.length <= 1;
+              });
+              console.log(`  📂 ${sharedDrive.name}: ${driveRootFiles.length}개`);
+              rootFiles.push(...driveRootFiles);
+            } catch (e) {
+              console.log(`  ❌ ${sharedDrive.name} 실패`);
+            }
+          }
+          files = rootFiles;
+          console.log(`📂 공유 문서함 루트: 총 ${files.length}개 수집`);
           
         } else {
           // 기본 모드: 추가 색인 (최근 수정된 문서만)
