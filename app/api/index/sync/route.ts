@@ -243,12 +243,8 @@ export async function POST(req: Request) {
             };
           });
 
-          // 전체 색인, 추가 색인 모두 기존 데이터 유지하며 추가/업데이트
-          if (!incremental || !lastSyncTime) {
-            console.log(`🎨 Figma 전체 색인: 모든 문서 upsert (기존 데이터 유지)...`);
-          } else {
-            console.log(`🎨 Figma 추가 색인: 새 문서만 추가...`);
-          }
+          // 모든 파일 upsert
+          console.log(`🎨 Figma 색인: ${docRecords.length}개 문서 upsert...`);
           await bulkUpsertDocuments(docRecords);
 
           const count = await getDocumentCount('figma');
@@ -335,13 +331,9 @@ export async function POST(req: Request) {
             };
           });
 
-          // 전체 색인, 추가 색인 모두 기존 데이터 유지하며 추가/업데이트
+          // 모든 이슈 upsert
           if (docRecords.length > 0) {
-            if (!incremental || !updatedAfter) {
-              console.log(`📋 Jira 전체 색인: 모든 이슈 upsert (기존 데이터 유지)...`);
-            } else {
-              console.log(`📋 Jira 추가 색인: 새 이슈만 추가...`);
-            }
+            console.log(`📋 Jira 색인: ${docRecords.length}개 이슈 upsert...`);
             await bulkUpsertDocuments(docRecords);
           }
 
