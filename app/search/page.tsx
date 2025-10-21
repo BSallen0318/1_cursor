@@ -286,13 +286,38 @@ export default function SearchPage() {
                   </div>
                 )}
                 {!loading && q && data && (
-                  <ResultsList items={data.items} activeId={selectedId || undefined} onSelect={async (id: string) => {
-                    setSelectedId(id);
-                    setSelected({ loading: true });
-                    const r = await fetch(`/api/docs/${id}?q=${encodeURIComponent(q)}`, { credentials: 'include' });
-                    const payload = await r.json();
-                    setSelected(payload);
-                  }} searchContent={lastSearchUsedContent} query={q} keywords={(data as any)?.debug?.extractedKeywords} />
+                  <>
+                    {/* RAG 검색 의도 표시 */}
+                    {(data as any)?.debug?.ragIntent && (
+                      <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 rounded-xl border-2 border-blue-200 dark:border-blue-800">
+                        <div className="flex items-start gap-3">
+                          <span className="text-2xl">🧠</span>
+                          <div>
+                            <div className="font-semibold text-blue-900 dark:text-blue-100 mb-1">AI 검색 의도 분석</div>
+                            <div className="text-sm text-blue-700 dark:text-blue-300">{(data as any).debug.ragIntent}</div>
+                            {(data as any)?.debug?.structuredQuery?.titleMust && (
+                              <div className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                                🎯 제목 필터: {(data as any).debug.structuredQuery.titleMust.join(', ')}
+                              </div>
+                            )}
+                            {(data as any)?.debug?.structuredQuery?.contentMust && (
+                              <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                                📝 내용 필터: {(data as any).debug.structuredQuery.contentMust.join(', ')}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <ResultsList items={data.items} activeId={selectedId || undefined} onSelect={async (id: string) => {
+                      setSelectedId(id);
+                      setSelected({ loading: true });
+                      const r = await fetch(`/api/docs/${id}?q=${encodeURIComponent(q)}`, { credentials: 'include' });
+                      const payload = await r.json();
+                      setSelected(payload);
+                    }} searchContent={lastSearchUsedContent} query={q} keywords={(data as any)?.debug?.extractedKeywords} />
+                  </>
                 )}
                 {!loading && data && !lastSearchUsedContent && (
                   <div className="flex items-center gap-3 mt-6 justify-center">

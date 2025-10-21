@@ -169,21 +169,27 @@ export async function POST(req: Request) {
             const semanticStartTime = Date.now();
             const [qv] = await embedTexts([q]);
             
-            // 단순 키워드인지 복잡한 자연어인지 판단
+            // RAG: 자연어 쿼리를 구조화된 형태로 파싱
             const words = q.trim().split(/[\s,.\-_]+/).filter(w => w.length >= 2);
-            const isSimpleKeyword = words.length <= 2 && !/[찾아|알려|보여|주세요|해줘|관련|문서]/.test(q);
+            const isSimpleKeyword = words.length <= 2 && !/[찾아|알려|보여|주세요|해줘|관련|문서|언급|들어간]/.test(q);
             
+            let structuredQuery: any;
             let keywords: string[];
+            
             if (isSimpleKeyword) {
               // 단순 키워드: 원본 그대로 사용
               keywords = words;
+              structuredQuery = { keywords, intent: q };
               console.log('🔍 단순 키워드 검색 (Gemini 건너뜀):', keywords);
               debug.keywordExtractionMethod = 'simple';
             } else {
-              // 복잡한 자연어: Gemini에게 핵심 키워드 추출 요청
-              keywords = await extractKeywords(q);
-              console.log('🔍 Gemini 키워드 추출:', keywords);
-              debug.keywordExtractionMethod = 'gemini';
+              // 복잡한 자연어: Gemini RAG로 구조화
+              const { parseSearchQuery } = await import('@/lib/ai');
+              structuredQuery = await parseSearchQuery(q);
+              keywords = structuredQuery.keywords || [];
+              console.log('🧠 RAG 구조화된 쿼리:', structuredQuery);
+              debug.keywordExtractionMethod = 'rag';
+              debug.structuredQuery = structuredQuery;
             }
             
             // 변형 키워드 추가 (스마트하게)
@@ -198,6 +204,52 @@ export async function POST(req: Request) {
             
             console.log('🔍 최종 키워드:', keywords);
             debug.extractedKeywords = keywords;
+            
+            // RAG 필터링: titleMust, contentMust 조건 적용
+            if (structuredQuery.titleMust && structuredQuery.titleMust.length > 0) {
+              const beforeFilter = filtered.length;
+              const titleMustKeywords: string[] = structuredQuery.titleMust;
+              filtered = filtered.filter((d: any) => {
+                const title = (d.title || '').toLowerCase();
+                return titleMustKeywords.every((keyword) => 
+                  title.includes(keyword.toLowerCase())
+                );
+              });
+              console.log(`🎯 제목 필터 (${structuredQuery.titleMust.join(', ')}): ${beforeFilter}개 → ${filtered.length}개`);
+              debug.titleFilterApplied = true;
+              debug.titleFilterCount = filtered.length;
+            }
+            
+            if (structuredQuery.contentMust && structuredQuery.contentMust.length > 0) {
+              const beforeFilter = filtered.length;
+              const contentMustKeywords: string[] = structuredQuery.contentMust;
+              filtered = filtered.filter((d: any) => {
+                const content = (d.content || '').toLowerCase();
+                return contentMustKeywords.every((keyword) => 
+                  content.includes(keyword.toLowerCase())
+                );
+              });
+              console.log(`📝 내용 필터 (${structuredQuery.contentMust.join(', ')}): ${beforeFilter}개 → ${filtered.length}개`);
+              debug.contentFilterApplied = true;
+              debug.contentFilterCount = filtered.length;
+            }
+            
+            // 숫자 조건 필터링
+            if (structuredQuery.conditions && structuredQuery.conditions.length > 0) {
+              const beforeFilter = filtered.length;
+              filtered = filtered.filter((d: any) => {
+                const fullText = `${d.title} ${d.content || ''}`.toLowerCase();
+                return structuredQuery.conditions!.every((cond: any) => {
+                  if (cond.type === 'contains') {
+                    return fullText.includes(cond.value);
+                  }
+                  return true;
+                });
+              });
+              console.log(`🔢 조건 필터 (${structuredQuery.conditions.map((c: any) => c.value).join(', ')}): ${beforeFilter}개 → ${filtered.length}개`);
+              debug.conditionFilterApplied = true;
+              debug.conditionFilterCount = filtered.length;
+            }
             
             // 결과가 적으면 키워드 추출 후 확장 검색
             let pool = filtered;
@@ -386,6 +438,11 @@ export async function POST(req: Request) {
 
         debug.searchTime = Date.now() - startTime;
         debug.source = 'database_index';
+        
+        // RAG 정보 추가
+        if (debug.structuredQuery) {
+          debug.ragIntent = debug.structuredQuery.intent;
+        }
 
         return NextResponse.json({
           items: paged,

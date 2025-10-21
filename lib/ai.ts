@@ -206,37 +206,63 @@ export function cosineSimilarity(a: number[], b: number[]) {
   return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
 }
 
-// Gemini에게 검색어에서 핵심 키워드만 추출 요청
-export async function extractKeywords(query: string): Promise<string[]> {
+// 구조화된 검색 쿼리 (RAG 개선)
+export interface StructuredQuery {
+  keywords: string[];           // 핵심 키워드
+  titleMust?: string[];         // 제목에 반드시 포함
+  contentMust?: string[];       // 내용에 반드시 포함
+  conditions?: Array<{          // 추가 조건
+    type: 'contains' | 'range' | 'comparison';
+    field?: string;
+    value: string;
+  }>;
+  intent?: string;              // 검색 의도 요약
+}
+
+// Gemini RAG: 자연어를 구조화된 검색 쿼리로 변환
+export async function parseSearchQuery(query: string): Promise<StructuredQuery> {
   const provider = resolveProvider();
   const DEBUG = process.env.AI_DEBUG === '1' || process.env.AI_DEBUG === 'true';
   
-  const userPrompt = `다음 검색어에서 문서 검색에 필요한 핵심 키워드만 추출해주세요.
+  const userPrompt = `다음 자연어 검색 요청을 분석하여 JSON 형식으로 구조화해주세요.
 
-중요한 규칙:
-1. "문서", "내용", "관련", "요청", "찾아", "알려", "보여", "언급", "관해" 같은 일반적인 단어는 완전히 제외
-2. 실제 검색 대상이 되는 고유명사, 주제, 개념만 추출
-3. "멀티 문서" → "멀티플레이"로 정확하게 변환
-4. "방 인원" → "방", "인원"으로 분리
-5. 최대 5개까지만
-6. 각 키워드는 쉼표로 구분
-7. 다른 설명 없이 키워드만 출력
+검색 요청: "${query}"
 
-예시:
-- "멀티 문서에서 방 인원에 관해 언급한 내용을 찾아줘" → "멀티플레이,방,인원"
-- "무인매장 설정 통계 관련한 문서 찾아줘" → "무인매장,설정,통계"
+분석 규칙:
+1. keywords: 핵심 검색어 (최대 5개)
+2. titleMust: 제목에 반드시 포함되어야 할 키워드 (있으면)
+3. contentMust: 내용에 반드시 포함되어야 할 키워드 (있으면)
+4. conditions: 숫자, 범위 등 추가 조건 (있으면)
+5. intent: 검색 의도를 한 문장으로
 
-검색어: ${query}
+예시 1:
+입력: "멀티 이름이 들어간 문서에서 인원 200명을 언급하는 내용을 가진 문서를 찾아줘"
+출력:
+{
+  "keywords": ["멀티", "멀티플레이", "인원"],
+  "titleMust": ["멀티"],
+  "contentMust": ["200명", "인원"],
+  "conditions": [{"type": "contains", "value": "200"}],
+  "intent": "멀티 관련 문서 중 200명 인원을 언급하는 문서 찾기"
+}
 
-출력 (키워드만):`;
+예시 2:
+입력: "스트로크 메뉴 UI"
+출력:
+{
+  "keywords": ["스트로크", "메뉴", "UI"],
+  "intent": "스트로크 메뉴 UI 관련 문서 찾기"
+}
+
+JSON만 출력하세요 (설명 없이):`;
 
   if (provider === 'gemini') {
     try {
       const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 5_000);
+      const to = setTimeout(() => ctrl.abort(), 6_000);
       const url = `${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
       
-      if (DEBUG) console.log('[Gemini] 키워드 추출 시작');
+      if (DEBUG) console.log('[RAG] 쿼리 파싱 시작:', query);
       
       const res = await fetch(url, {
         method: 'POST',
@@ -245,7 +271,7 @@ export async function extractKeywords(query: string): Promise<string[]> {
           contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
           generationConfig: { 
             temperature: 0.1,
-            maxOutputTokens: 100,
+            maxOutputTokens: 300,
             topP: 0.8,
             topK: 20
           }
@@ -255,31 +281,56 @@ export async function extractKeywords(query: string): Promise<string[]> {
       clearTimeout(to);
       
       if (!res.ok) {
-        if (DEBUG) console.error('[Gemini] 키워드 추출 실패:', res.status);
-        return fallbackKeywordExtraction(query);
+        if (DEBUG) console.error('[RAG] 쿼리 파싱 실패:', res.status);
+        return fallbackStructuredQuery(query);
       }
       
       const json: any = await res.json();
       const textOut: string | undefined = json?.candidates?.[0]?.content?.parts?.[0]?.text;
       
       if (typeof textOut === 'string' && textOut.trim()) {
-        // 쉼표로 구분된 키워드 파싱
-        const keywords = textOut.trim()
-          .split(/[,\n]+/)
-          .map(k => k.trim())
-          .filter(k => k.length >= 2)
-          .slice(0, 5);
-        
-        if (DEBUG) console.log('[Gemini] 추출된 키워드:', keywords);
-        return keywords;
+        // JSON 파싱 시도
+        try {
+          const cleaned = textOut.trim().replace(/```json\s*/g, '').replace(/```\s*/g, '');
+          const structured = JSON.parse(cleaned) as StructuredQuery;
+          
+          if (DEBUG) console.log('[RAG] 구조화된 쿼리:', structured);
+          return structured;
+        } catch (e) {
+          if (DEBUG) console.error('[RAG] JSON 파싱 실패:', textOut.slice(0, 200));
+        }
       }
     } catch (err: any) {
-      if (DEBUG) console.error('[Gemini] 키워드 추출 예외:', err?.message);
+      if (DEBUG) console.error('[RAG] 쿼리 파싱 예외:', err?.message);
     }
   }
   
   // Fallback: 기존 방식
-  return fallbackKeywordExtraction(query);
+  return fallbackStructuredQuery(query);
+}
+
+// Gemini에게 검색어에서 핵심 키워드만 추출 요청 (레거시)
+export async function extractKeywords(query: string): Promise<string[]> {
+  const structured = await parseSearchQuery(query);
+  return structured.keywords;
+}
+
+// Fallback: 구조화된 쿼리 생성 (Gemini 실패 시)
+function fallbackStructuredQuery(query: string): StructuredQuery {
+  const keywords = fallbackKeywordExtraction(query);
+  
+  // 숫자 패턴 감지
+  const numberMatches = query.match(/\d+/g);
+  const conditions = numberMatches ? numberMatches.map(n => ({
+    type: 'contains' as const,
+    value: n
+  })) : undefined;
+  
+  return {
+    keywords,
+    conditions,
+    intent: query
+  };
 }
 
 // Fallback 키워드 추출 (Gemini 실패 시)
