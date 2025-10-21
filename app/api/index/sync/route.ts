@@ -111,7 +111,7 @@ export async function POST(req: Request) {
                 pageSize: 100,
                 includeItemsFromAllDrives: true,
                 supportsAllDrives: true,
-                fields: 'files(id,driveId,name,mimeType,modifiedTime,owners,webViewLink,iconLink,parents)'
+                fields: 'files(id,driveId,name,mimeType,modifiedTime,owners(displayName,emailAddress,me,permissionId),webViewLink,iconLink,parents)'
               });
               const driveRootFiles = (r.data?.files || []).filter((f: any) => {
                 // parents가 없거나 1개인 파일만 (루트 레벨)

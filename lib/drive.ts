@@ -54,7 +54,7 @@ export async function driveSearch(tokens: DriveTokens, q: string, pageToken?: st
     supportsAllDrives: true,
     corpora: 'allDrives',
     orderBy: 'modifiedTime desc',
-    fields: 'files(id,driveId,name,mimeType,modifiedTime,owners,webViewLink,iconLink,parents),nextPageToken'
+    fields: 'files(id,driveId,name,mimeType,modifiedTime,owners(displayName,emailAddress,me,permissionId),webViewLink,iconLink,parents),nextPageToken'
   });
   return res.data;
 }
@@ -89,7 +89,7 @@ export async function driveSearchSharedDrives(tokens: DriveTokens, q: string, pa
         includeItemsFromAllDrives: true,
         supportsAllDrives: true,
         orderBy: 'modifiedTime desc',
-        fields: 'files(id,name,mimeType,modifiedTime,owners,webViewLink,iconLink,parents)'
+        fields: 'files(id,name,mimeType,modifiedTime,owners(displayName,emailAddress,me,permissionId),webViewLink,iconLink,parents)'
       });
       results.push(...(r.data.files || []));
     } catch {}
@@ -135,7 +135,7 @@ export async function driveSearchSharedOnly(tokens: DriveTokens, q: string, page
       includeItemsFromAllDrives: true,
       supportsAllDrives: true,
       orderBy: 'modifiedTime desc',
-      fields: 'files(id,name,mimeType,modifiedTime,owners,webViewLink,iconLink)'
+      fields: 'files(id,name,mimeType,modifiedTime,owners(displayName,emailAddress,me,permissionId),webViewLink,iconLink)'
     }).catch(() => ({ data: { files: [] } } as any))
   );
 
@@ -177,7 +177,7 @@ export async function driveSearchAggregate(tokens: DriveTokens, q: string, scope
         includeItemsFromAllDrives: true,
         supportsAllDrives: true,
         orderBy: 'modifiedTime desc',
-        fields: 'files(id,driveId,name,mimeType,modifiedTime,owners,webViewLink,iconLink)'
+        fields: 'files(id,driveId,name,mimeType,modifiedTime,owners(displayName,emailAddress,me,permissionId),webViewLink,iconLink)'
       })
       .catch(() => ({ data: { files: [] } } as any));
     parts.push(swm.data?.files || []);
@@ -197,7 +197,7 @@ export async function driveSearchAggregate(tokens: DriveTokens, q: string, scope
           includeItemsFromAllDrives: true,
           supportsAllDrives: true,
           orderBy: 'modifiedTime desc',
-          fields: 'files(id,driveId,name,mimeType,modifiedTime,owners,webViewLink,iconLink),nextPageToken'
+          fields: 'files(id,driveId,name,mimeType,modifiedTime,owners(displayName,emailAddress,me,permissionId),webViewLink,iconLink),nextPageToken'
         })
         .catch(() => ({ data: { files: [], nextPageToken: undefined } } as any));
       all.push(...((r.data?.files || []).filter((f: any) => !!f.driveId))); // driveId가 있는 항목 = 공유 드라이브 소속
@@ -245,7 +245,7 @@ export async function driveSearchSharedDrivesEx(tokens: DriveTokens, q: string, 
           includeItemsFromAllDrives: true,
           supportsAllDrives: true,
           orderBy: 'modifiedTime desc',
-          fields: 'files(id,driveId,name,mimeType,modifiedTime,owners,webViewLink,iconLink),nextPageToken'
+          fields: 'files(id,driveId,name,mimeType,modifiedTime,owners(displayName,emailAddress,me,permissionId),webViewLink,iconLink),nextPageToken'
         })
         .catch(() => ({ data: { files: [], nextPageToken: undefined } } as any));
       all.push(...(r.data?.files || []));
@@ -285,7 +285,7 @@ export async function driveSearchSharedWithMeEx(tokens: DriveTokens, q: string, 
         includeItemsFromAllDrives: true,
         supportsAllDrives: true,
         orderBy: 'modifiedTime desc',
-        fields: 'files(id,name,mimeType,modifiedTime,owners,webViewLink,iconLink),nextPageToken'
+        fields: 'files(id,name,mimeType,modifiedTime,owners(displayName,emailAddress,me,permissionId),webViewLink,iconLink),nextPageToken'
       })
       .catch(() => ({ data: { files: [], nextPageToken: undefined } } as any));
     all.push(...(r.data?.files || []));
@@ -321,7 +321,7 @@ export async function driveSearchSharedWithMeByText(tokens: DriveTokens, q: stri
         includeItemsFromAllDrives: true,
         supportsAllDrives: true,
         orderBy: 'modifiedTime desc',
-        fields: 'files(id,name,mimeType,modifiedTime,owners,webViewLink,iconLink),nextPageToken'
+        fields: 'files(id,name,mimeType,modifiedTime,owners(displayName,emailAddress,me,permissionId),webViewLink,iconLink),nextPageToken'
       })
       .catch(() => ({ data: { files: [], nextPageToken: undefined } } as any));
     all.push(...(r.data?.files || []));
@@ -338,7 +338,7 @@ export async function driveGetFile(tokens: DriveTokens, fileId: string) {
   const drive = google.drive({ version: 'v3', auth: oauth2 });
   const { data } = await drive.files.get({
     fileId,
-    fields: 'id,name,mimeType,modifiedTime,owners,webViewLink,iconLink,description,lastModifyingUser'
+    fields: 'id,name,mimeType,modifiedTime,owners(displayName,emailAddress,me,permissionId),webViewLink,iconLink,description,lastModifyingUser(displayName,emailAddress,me)'
   });
   return data;
 }
@@ -466,7 +466,7 @@ export async function driveSearchByFolderName(tokens: DriveTokens, q: string, li
           includeItemsFromAllDrives: true,
           supportsAllDrives: true,
           orderBy: 'modifiedTime desc',
-          fields: 'files(id,driveId,name,mimeType,modifiedTime,owners,webViewLink,iconLink,parents),nextPageToken'
+          fields: 'files(id,driveId,name,mimeType,modifiedTime,owners(displayName,emailAddress,me,permissionId),webViewLink,iconLink,parents),nextPageToken'
         })
         .catch(() => ({ data: { files: [], nextPageToken: undefined } } as any));
 
@@ -518,7 +518,7 @@ export async function driveCrawlAllAccessibleFiles(tokens: DriveTokens, limit: n
         includeItemsFromAllDrives: true,
         supportsAllDrives: true,
         orderBy: 'modifiedTime desc',
-        fields: 'files(id,driveId,name,mimeType,modifiedTime,owners,webViewLink,iconLink,parents),nextPageToken'
+        fields: 'files(id,driveId,name,mimeType,modifiedTime,owners(displayName,emailAddress,me,permissionId),webViewLink,iconLink,parents),nextPageToken'
       })
       .catch(() => ({ data: { files: [], nextPageToken: undefined } } as any));
     results.push(...(r.data?.files || []));
