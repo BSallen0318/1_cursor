@@ -51,43 +51,35 @@ export async function POST(req: Request) {
         if (mode === 'folder' && folderName) {
           // 특정 폴더 색인
           if (subfolders && subfolders.length > 0) {
-            // 특정 하위 폴더들만 수집
-            console.log(`📁 폴더 색인 시작: ${folderName} - 하위 폴더 ${subfolders.length}개...`);
-            const allSubResults: any[] = [];
+            // 부모 폴더 전체 수집 후 필터링
+            console.log(`📁 폴더 색인 시작: ${folderName} - 하위 필터 적용...`);
             
-            // 하위 폴더들 수집
-            for (const subfolder of subfolders) {
-              try {
-                const fullPath = `${folderName}/${subfolder}`;
-                const r = await driveSearchByFolderName(driveTokens, fullPath, 500);
-                if (r?.files?.length) {
-                  console.log(`  📁 ${subfolder}: ${r.files.length}개`);
-                  allSubResults.push(...r.files);
-                }
-              } catch (e) {
-                console.log(`  ❌ ${subfolder} 실패`);
+            // 1) 부모 폴더 전체 수집
+            const r = await driveSearchByFolderName(driveTokens, folderName, 5000);
+            const allFiles = r?.files || [];
+            console.log(`  📦 전체 수집: ${allFiles.length}개`);
+            
+            // 2) subfolders 필터 적용
+            files = allFiles.filter((f: any) => {
+              const matchedName = (f as any)._folderMatchedName || '';
+              
+              // 지정된 폴더로 시작하는지 확인
+              const matchesSubfolder = subfolders.some(s => matchedName.startsWith(s));
+              
+              // 파트1 (00-70): 루트 파일도 포함
+              const isPart1 = subfolders.some(s => s.startsWith('00') || s.startsWith('10') || s.startsWith('20'));
+              
+              if (isPart1) {
+                // 루트 파일이거나 지정 폴더에 속함
+                const isRootFile = !matchedName || matchedName === folderName.split('/').pop();
+                return matchesSubfolder || isRootFile;
+              } else {
+                // 파트2 또는 스크린전략본부: 지정 폴더만
+                return matchesSubfolder;
               }
-            }
+            });
             
-            // 81-999 파트인 경우 루트 파일도 추가
-            const isPart2 = subfolders.some(s => s.startsWith('81') || s.startsWith('82') || s.startsWith('90'));
-            if (isPart2) {
-              try {
-                // 부모 폴더의 바로 밑 파일들도 수집
-                const rootFiles = await driveSearchByFolderName(driveTokens, folderName, 100);
-                const directFiles = (rootFiles?.files || []).filter((f: any) => {
-                  // 파일이면서, 부모가 해당 폴더인 것만
-                  return f.mimeType !== 'application/vnd.google-apps.folder';
-                });
-                console.log(`  📄 루트 파일: ${directFiles.length}개`);
-                allSubResults.push(...directFiles);
-              } catch (e) {
-                console.log(`  ❌ 루트 파일 수집 실패`);
-              }
-            }
-            
-            files = allSubResults;
-            console.log(`📁 ${folderName} (${subfolders.length}개 하위${isPart2 ? ' + 루트 파일' : ''}): 총 ${files.length}개 수집`);
+            console.log(`  ✅ 필터링 후: ${files.length}개`);
           } else {
             // 전체 폴더 재귀 수집
             console.log(`📁 폴더 색인 시작: ${folderName} (하위 모두 포함)...`);

@@ -329,14 +329,38 @@ export default function IntegrationsPage() {
               <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">📁 폴더별 색인</div>
               
               <button
-                onClick={() => startSync(['drive'], 'folder', '40.스크린기획팀/아카데미기획팀')}
+                onClick={() => startSync(['drive'], 'folder', '스크린 전략본부', ['00.', '20.', '50.', '60.', '70.', '80.', 'SQA팀_Old'])}
+                disabled={syncing}
+                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
+              >
+                <span className="text-2xl">📁</span>
+                <div>
+                  <div className="font-bold">스크린전략본부 (일부)</div>
+                  <div className="text-xs opacity-80">00,20,50,60,70,80,SQA팀 + 루트 파일</div>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => startSync(['drive'], 'folder', '40.스크린기획팀/아카데미기획팀', ['00.', '10.', '20.', '30.', '40.', '50.', '60.', '70.'])}
                 disabled={syncing}
                 className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
               >
                 <span className="text-2xl">📁</span>
                 <div>
-                  <div className="font-bold">스크린기획팀 (전체)</div>
-                  <div className="text-xs opacity-80">40.스크린기획팀/아카데미기획팀 하위 모두 (최대 5000개)</div>
+                  <div className="font-bold">스크린기획팀 파트1 (00-70)</div>
+                  <div className="text-xs opacity-80">00~70 폴더 하위 전체 + 루트 파일</div>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => startSync(['drive'], 'folder', '40.스크린기획팀/아카데미기획팀', ['80.', '81.', '82.', '90.', '100.', '110.', '120.', '200.', '999.'])}
+                disabled={syncing}
+                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
+              >
+                <span className="text-2xl">📁</span>
+                <div>
+                  <div className="font-bold">스크린기획팀 파트2 (80-999)</div>
+                  <div className="text-xs opacity-80">80~999 폴더 하위 전체</div>
                 </div>
               </button>
               
