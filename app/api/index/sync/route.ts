@@ -17,7 +17,8 @@ export async function POST(req: Request) {
     folderName = '',
     recursive = true,
     subfolders = [],
-    excludeFolders = []
+    excludeFolders = [],
+    forceFullIndex = false
   } = body as { 
     platforms?: string[]; 
     incremental?: boolean;
@@ -26,6 +27,7 @@ export async function POST(req: Request) {
     recursive?: boolean;
     subfolders?: string[];
     excludeFolders?: string[];
+    forceFullIndex?: boolean;
   };
 
   const results: any = {
@@ -129,12 +131,18 @@ export async function POST(req: Request) {
         } else {
           // 기본 모드: 추가 색인 (최근 수정된 문서만)
           let modifiedTimeAfter: string | undefined = undefined;
-          const lastSync = await getMetadata('drive_last_sync');
-          if (lastSync) {
-            modifiedTimeAfter = lastSync;
-            console.log(`➕ 추가 색인: ${lastSync} 이후 수정된 문서만...`);
+          
+          // forceFullIndex가 true면 타임스탬프 무시
+          if (!forceFullIndex) {
+            const lastSync = await getMetadata('drive_last_sync');
+            if (lastSync) {
+              modifiedTimeAfter = lastSync;
+              console.log(`➕ 추가 색인: ${lastSync} 이후 수정된 문서만...`);
+            } else {
+              console.log('➕ 추가 색인 (타임스탬프 없음, 최신 3000개)...');
+            }
           } else {
-            console.log('➕ 추가 색인 (타임스탬프 없음, 최신 3000개)...');
+            console.log('🔄 강제 전체 재색인: 모든 문서 다시 수집...');
           }
           
           const [sdx, crawl] = await Promise.all([
