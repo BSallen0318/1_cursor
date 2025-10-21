@@ -7,6 +7,8 @@ export default function IndexManagementPage() {
   const [syncing, setSyncing] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [fullReindexing, setFullReindexing] = useState(false);
+  const [reindexProgress, setReindexProgress] = useState('');
 
   const loadStatus = async () => {
     setLoading(true);
@@ -46,6 +48,77 @@ export default function IndexManagementPage() {
       });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const startFullReindex = async () => {
+    if (!confirm('DB를 초기화하고 전체 재색인을 시작합니다. 계속하시겠습니까?')) {
+      return;
+    }
+
+    setFullReindexing(true);
+    setResult(null);
+    setReindexProgress('');
+
+    try {
+      // 1단계: DB 클리어
+      setReindexProgress('1/3: DB 클리어 중...');
+      await fetch('/api/admin/clear-db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: 'drive' })
+      });
+
+      // 2단계: 타임스탬프 설정
+      setReindexProgress('2/3: 타임스탬프 설정 중...');
+      await fetch('/api/admin/set-timestamp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform: 'drive', action: 'setOld' })
+      });
+
+      // 3단계: 점진적 색인 (10회 반복)
+      let totalIndexed = 0;
+      for (let i = 1; i <= 10; i++) {
+        setReindexProgress(`3/3: 색인 중... (${i}/10회)`);
+        
+        const res = await fetch('/api/index/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ platforms: ['drive'], mode: 'normal' })
+        });
+        
+        const data = await res.json();
+        if (data.platforms?.drive?.indexed) {
+          totalIndexed = data.platforms.drive.indexed;
+        }
+        
+        // 2초 대기
+        await new Promise(r => setTimeout(r, 2000));
+      }
+
+      setResult({
+        success: true,
+        platforms: {
+          drive: {
+            success: true,
+            indexed: totalIndexed,
+            message: `전체 재색인 완료: ${totalIndexed}개 문서`
+          }
+        }
+      });
+
+      // 색인 완료 후 상태 갱신
+      await loadStatus();
+    } catch (e: any) {
+      setResult({
+        success: false,
+        error: e?.message || '전체 재색인 실패'
+      });
+    } finally {
+      setFullReindexing(false);
+      setReindexProgress('');
     }
   };
 
@@ -122,27 +195,35 @@ export default function IndexManagementPage() {
               </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="space-y-3">
+              <button
+                onClick={startFullReindex}
+                disabled={syncing || fullReindexing}
+                className="w-full h-14 px-6 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {fullReindexing ? `⏳ ${reindexProgress || '재색인 중...'}` : '🔄 Drive 전체 재색인 (DB 초기화 + 전체 수집)'}
+              </button>
+
               <button
                 onClick={() => startSync(['drive', 'figma'])}
-                disabled={syncing}
-                className="flex-1 h-14 px-6 rounded-xl bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={syncing || fullReindexing}
+                className="w-full h-14 px-6 rounded-xl bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white font-bold transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {syncing ? '⏳ 색인 중...' : '🔄 전체 색인 시작 (Drive + Figma)'}
+                {syncing ? '⏳ 색인 중...' : '➕ 증분 색인 (최근 문서만)'}
               </button>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => startSync(['drive'])}
-                disabled={syncing}
+                disabled={syncing || fullReindexing}
                 className="h-12 px-4 rounded-xl border-2 border-green-500 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/20 font-semibold transition-all disabled:opacity-50"
               >
                 📊 Drive만 색인
               </button>
               <button
                 onClick={() => startSync(['figma'])}
-                disabled={syncing}
+                disabled={syncing || fullReindexing}
                 className="h-12 px-4 rounded-xl border-2 border-purple-500 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/20 font-semibold transition-all disabled:opacity-50"
               >
                 🎨 Figma만 색인
