@@ -145,9 +145,12 @@ export async function POST(req: Request) {
             console.log('🔄 강제 전체 재색인: 모든 문서 다시 수집...');
           }
           
+          // 타임아웃 방지를 위해 배치 크기 축소
+          const batchLimit = forceFullIndex ? 1000 : 3000;
+          
           const [sdx, crawl] = await Promise.all([
-            driveSearchSharedDrivesEx(driveTokens, '', 2000).catch(() => ({ files: [] })),
-            driveCrawlAllAccessibleFiles(driveTokens, 3000, modifiedTimeAfter).catch(() => ({ files: [] }))
+            driveSearchSharedDrivesEx(driveTokens, '', Math.floor(batchLimit * 0.3)).catch(() => ({ files: [] })),
+            driveCrawlAllAccessibleFiles(driveTokens, Math.floor(batchLimit * 0.7), modifiedTimeAfter).catch(() => ({ files: [] }))
           ]);
           
           const mergedMap = new Map<string, any>();
