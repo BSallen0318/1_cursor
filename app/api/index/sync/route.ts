@@ -18,7 +18,8 @@ export async function POST(req: Request) {
     recursive = true,
     subfolders = [],
     excludeFolders = [],
-    forceFullIndex = false
+    forceFullIndex = false,
+    skipTimestampUpdate = false
   } = body as { 
     platforms?: string[]; 
     incremental?: boolean;
@@ -28,6 +29,7 @@ export async function POST(req: Request) {
     subfolders?: string[];
     excludeFolders?: string[];
     forceFullIndex?: boolean;
+    skipTimestampUpdate?: boolean; // 타임스탬프를 업데이트하지 않고 계속 수집
   };
 
   const results: any = {
@@ -211,10 +213,12 @@ export async function POST(req: Request) {
         
         const count = await getDocumentCount('drive');
         
-        // 추가 색인일 때만 타임스탬프 업데이트
-        if (mode === 'normal') {
+        // 타임스탬프 업데이트 (skipTimestampUpdate가 true면 건너뜀)
+        if (mode === 'normal' && !skipTimestampUpdate) {
           await setMetadata('drive_last_sync', new Date().toISOString());
           console.log('📅 추가 색인 타임스탬프 업데이트');
+        } else if (skipTimestampUpdate) {
+          console.log('📅 타임스탬프 유지 (skipTimestampUpdate=true)');
         } else {
           console.log('📅 폴더 색인 완료 (타임스탬프 유지)');
         }
