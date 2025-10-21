@@ -58,8 +58,11 @@ export async function POST(req: Request) {
             // 하위 폴더들 수집
             for (const subfolder of subfolders) {
               try {
-                const fullPath = `${folderName}/${subfolder}`;
-                const r = await driveSearchByFolderName(driveTokens, fullPath, 500);
+                // folderName에서 마지막 폴더만 사용 (예: "40.스크린기획팀/아카데미기획팀" → "아카데미기획팀")
+                const parentFolder = folderName.includes('/') ? folderName.split('/').pop() : folderName;
+                
+                // subfolder 검색 (예: "00.", "10." 등)
+                const r = await driveSearchByFolderName(driveTokens, subfolder.trim(), 500);
                 if (r?.files?.length) {
                   console.log(`  📁 ${subfolder}: ${r.files.length}개`);
                   allSubResults.push(...r.files);
@@ -69,18 +72,20 @@ export async function POST(req: Request) {
               }
             }
             
-            // 81-999 파트인 경우 루트 파일도 추가
+            // 81-999 파트인 경우 부모 폴더의 루트 파일도 추가
             const isPart2 = subfolders.some(s => s.startsWith('81') || s.startsWith('82') || s.startsWith('90'));
-            if (isPart2) {
+            if (isPart2 && folderName) {
               try {
-                // 부모 폴더의 바로 밑 파일들도 수집
-                const rootFiles = await driveSearchByFolderName(driveTokens, folderName, 100);
-                const directFiles = (rootFiles?.files || []).filter((f: any) => {
-                  // 파일이면서, 부모가 해당 폴더인 것만
-                  return f.mimeType !== 'application/vnd.google-apps.folder';
-                });
-                console.log(`  📄 루트 파일: ${directFiles.length}개`);
-                allSubResults.push(...directFiles);
+                // 부모 폴더 이름 추출
+                const parentFolder = folderName.includes('/') ? folderName.split('/').pop() : folderName;
+                if (parentFolder) {
+                  const rootFiles = await driveSearchByFolderName(driveTokens, parentFolder.trim(), 100);
+                  const directFiles = (rootFiles?.files || []).filter((f: any) => {
+                    return f.mimeType !== 'application/vnd.google-apps.folder';
+                  });
+                  console.log(`  📄 ${parentFolder} 루트 파일: ${directFiles.length}개`);
+                  allSubResults.push(...directFiles);
+                }
               } catch (e) {
                 console.log(`  ❌ 루트 파일 수집 실패`);
               }
@@ -204,6 +209,17 @@ export async function POST(req: Request) {
 
         // 모든 모드에서 upsert (추가/업데이트)
         console.log(`📂 Drive 색인: ${files.length}개 문서 upsert...`);
+        
+        // 디버깅: 수집된 파일 샘플 출력
+        if (files.length > 0) {
+          console.log(`📋 수집된 파일 샘플 (상위 5개):`);
+          files.slice(0, 5).forEach((f: any) => {
+            console.log(`  - ${f.name} (${f.mimeType})`);
+          });
+        } else {
+          console.log(`⚠️ 경고: 수집된 파일이 0개입니다!`);
+        }
+        
         await bulkUpsertDocuments(docRecords);
         
         const count = await getDocumentCount('drive');
