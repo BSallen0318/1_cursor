@@ -342,49 +342,105 @@ export async function POST(req: Request) {
               });
             }
             
-            // Gemini 입력: 제목 + 전체 content (10000자까지)
-            const texts = pool.map((d: any) => {
-              const titlePart = d.title || '';
-              let contentPart = '';
-              if (d.content) {
-                // 전체 content 사용 (10000자까지)
-                contentPart = d.content.slice(0, 10000);
-              }
-              return `제목: ${titlePart}\n내용: ${contentPart}`.trim();
-            });
+            // 🎯 멀티벡터 검색: 제목과 내용을 분리 임베딩
+            console.log('🎯 멀티벡터 검색 시작 (제목 70% + 내용 30%)...');
             
-            const evs = await embedTexts(texts);
-            const sims: Record<string, number> = {};
+            // 1. 제목만 임베딩
+            const titles = pool.map((d: any) => d.title || 'Untitled');
+            const titleEmbeddings = await embedTexts(titles);
+            
+            // 2. 내용만 임베딩 (내용이 있는 문서만)
+            const contentsForEmbed: string[] = [];
+            const contentIndices: number[] = [];  // 어느 문서의 내용인지 추적
+            
             for (let i = 0; i < pool.length; i++) {
-              const v = evs[i] || [];
-              sims[pool[i].id] = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
+              const content = (pool[i] as any).content;
+              if (content && content.trim().length > 50) {
+                contentsForEmbed.push(content.slice(0, 5000));  // 5000자로 제한 (빠른 처리)
+                contentIndices.push(i);
+              }
             }
             
-            // 의미 유사도 점수 부여 (모든 문서에 점수 부여, threshold 없음)
+            const contentEmbeddings = contentsForEmbed.length > 0 
+              ? await embedTexts(contentsForEmbed) 
+              : [];
+            
+            console.log(`  📊 제목 임베딩: ${titleEmbeddings.length}개`);
+            console.log(`  📊 내용 임베딩: ${contentEmbeddings.length}개`);
+            
+            // 3. 각각 유사도 계산
+            const titleSims: Record<string, number> = {};
+            const contentSims: Record<string, number> = {};
+            
+            // 제목 유사도
+            for (let i = 0; i < pool.length; i++) {
+              const v = titleEmbeddings[i] || [];
+              titleSims[pool[i].id] = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
+            }
+            
+            // 내용 유사도 (있는 것만)
+            for (let i = 0; i < contentEmbeddings.length; i++) {
+              const docIndex = contentIndices[i];
+              const v = contentEmbeddings[i] || [];
+              contentSims[pool[docIndex].id] = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
+            }
+            
+            // 4. 가중치 적용: 제목 70%, 내용 30%
+            const TITLE_WEIGHT = 0.7;
+            const CONTENT_WEIGHT = 0.3;
+            
             for (const d of pool as any[]) {
-              d._embedScore = (sims[d.id] || 0) * 1000; // 1000배로 증폭
+              const titleScore = titleSims[d.id] || 0;
+              const contentScore = contentSims[d.id] || 0;
+              
+              // 내용이 있으면 가중 평균, 없으면 제목만
+              if (contentScore > 0) {
+                d._embedScore = (titleScore * TITLE_WEIGHT + contentScore * CONTENT_WEIGHT) * 1000;
+                d._titleEmbedScore = titleScore * 1000;
+                d._contentEmbedScore = contentScore * 1000;
+              } else {
+                d._embedScore = titleScore * 1000;  // 제목만 100%
+                d._titleEmbedScore = titleScore * 1000;
+                d._contentEmbedScore = 0;
+              }
             }
             
             // 점수 높은 순으로 정렬
             pool.sort((a: any, b: any) => (b._embedScore || 0) - (a._embedScore || 0));
             
-            // 상위 점수 로깅
+            // 상위 점수 로깅 (멀티벡터 점수 포함)
             const topScores = pool
               .slice(0, 10)
-              .map((d: any) => ({ title: d.title, score: (d._embedScore || 0) / 1000 }));
+              .map((d: any) => ({ 
+                title: d.title, 
+                totalScore: ((d._embedScore || 0) / 1000).toFixed(3),
+                titleScore: ((d._titleEmbedScore || 0) / 1000).toFixed(3),
+                contentScore: ((d._contentEmbedScore || 0) / 1000).toFixed(3)
+              }));
             debug.topSemanticScores = topScores;
+            debug.multiVectorEnabled = true;
             
             // 모든 문서를 결과에 포함 (threshold 제거)
             const similarDocs = pool;
             
-            // 기존 filtered와 병합
+            // 기존 filtered와 병합 (멀티벡터 점수 포함)
             const mergedMap = new Map();
             for (const d of filtered) {
-              mergedMap.set(d.id, { ...d, _embedScore: (sims[d.id] || 0) * 1000 });
+              const titleScore = titleSims[d.id] || 0;
+              const contentScore = contentSims[d.id] || 0;
+              const embedScore = contentScore > 0 
+                ? (titleScore * TITLE_WEIGHT + contentScore * CONTENT_WEIGHT) * 1000
+                : titleScore * 1000;
+              mergedMap.set(d.id, { 
+                ...d, 
+                _embedScore: embedScore,
+                _titleEmbedScore: titleScore * 1000,
+                _contentEmbedScore: contentScore * 1000
+              });
             }
             for (const d of similarDocs) {
               if (!mergedMap.has(d.id)) {
-                mergedMap.set(d.id, { ...d, _embedScore: (sims[d.id] || 0) * 1000 });
+                mergedMap.set(d.id, d);  // 이미 _embedScore 계산됨
               }
             }
             
@@ -392,9 +448,11 @@ export async function POST(req: Request) {
             
             debug.semanticApplied = true;
             debug.semanticTime = Date.now() - semanticStartTime;
-            debug.semanticCount = Object.keys(sims).length;
+            debug.semanticCount = Object.keys(titleSims).length;
             debug.semanticMatches = similarDocs.length;
             debug.extractedKeywords = keywords; // 프론트엔드로 키워드 전달
+            debug.titleEmbedCount = Object.keys(titleSims).length;
+            debug.contentEmbedCount = Object.keys(contentSims).length;
           } catch (e: any) {
             debug.semanticError = e?.message;
           }
