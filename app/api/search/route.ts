@@ -192,11 +192,21 @@ export async function POST(req: Request) {
               debug.structuredQuery = structuredQuery;
             }
             
-            // 🚨 초고빈도 키워드 필터링 (3글자 미만 완전 제거)
+            // 🚨 키워드 재분리 및 필터링 (공백 제거 + 3글자 미만 제거)
             const highFreqStopWords = ['문서', '관련', '찾아', '알려', '보여', '주세요', '해줘', '언급', '들어간', '있는', '있어', '있나', '뭐', '어디', '어떻게', '파일', '내용'];
             
-            const beforeFilter = keywords.length;
-            keywords = keywords.filter(kw => {
+            // 1. 모든 키워드를 공백/특수문자로 재분리
+            const resplitKeywords: string[] = [];
+            for (const kw of keywords) {
+              const parts = kw.split(/[\s,.\-_]+/).filter(p => p.length > 0);
+              resplitKeywords.push(...parts);
+            }
+            
+            console.log(`🔍 키워드 재분리 (공백 제거): ${keywords.length}개 → ${resplitKeywords.length}개`, resplitKeywords);
+            
+            // 2. 3글자 미만 제거 + stopWords 제거
+            const beforeFilter = resplitKeywords.length;
+            keywords = resplitKeywords.filter(kw => {
               const lower = kw.toLowerCase();
               // 🚨 3글자 미만은 무조건 제외 (Q, 방, 게임 등)
               if (lower.length < 3) {
@@ -206,7 +216,10 @@ export async function POST(req: Request) {
               return !highFreqStopWords.includes(lower);
             });
             
-            console.log(`🔍 키워드 필터링 (3글자 미만 제거): ${beforeFilter}개 → ${keywords.length}개`, keywords);
+            // 중복 제거
+            keywords = [...new Set(keywords)];
+            
+            console.log(`🔍 최종 필터링 (3글자 미만 제거): ${beforeFilter}개 → ${keywords.length}개`, keywords);
             
             // 🚨 키워드가 없으면 원본 쿼리에서 3글자 이상 단어 추출
             if (keywords.length === 0) {
