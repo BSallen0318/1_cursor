@@ -218,7 +218,13 @@ export async function driveSearchAggregate(tokens: DriveTokens, q: string, scope
 }
 
 // 공유 드라이브 전체를 드라이브별로 페이징 순회해 최대 limit까지 수집
-export async function driveSearchSharedDrivesEx(tokens: DriveTokens, q: string, limit: number = 300) {
+export async function driveSearchSharedDrivesEx(
+  tokens: DriveTokens, 
+  q: string, 
+  limit: number = 300, 
+  modifiedTimeAfter?: string,
+  modifiedTimeBefore?: string
+) {
   const google = await getGoogle();
   const oauth2 = await createOAuthClient();
   oauth2.setCredentials(tokens);
@@ -226,7 +232,15 @@ export async function driveSearchSharedDrivesEx(tokens: DriveTokens, q: string, 
 
   const escaped = (q || '').replace(/'/g, "\\'");
   const textCond = q ? `(name contains '${escaped}' or fullText contains '${escaped}') and` : '';
-  const query = `${textCond} trashed = false`;
+  let query = `${textCond} trashed = false`;
+  
+  // 연도 범위 필터 추가
+  if (modifiedTimeAfter) {
+    query += ` and modifiedTime >= '${modifiedTimeAfter}'`;
+  }
+  if (modifiedTimeBefore) {
+    query += ` and modifiedTime <= '${modifiedTimeBefore}'`;
+  }
 
   const all: any[] = [];
   const drivesRes = await drive.drives.list({ pageSize: 100 }).catch(() => ({ data: { drives: [] } }));
@@ -494,16 +508,24 @@ export async function driveSearchByFolderName(tokens: DriveTokens, q: string, li
 
 // 접근 가능한 모든 드라이브(allDrives)를 전수 페이징으로 수집한 뒤 서버에서 필터합니다.
 // 멤버가 아닌 공유 드라이브의 깊은 하위 파일을 놓치는 경우의 안전망입니다.
-export async function driveCrawlAllAccessibleFiles(tokens: DriveTokens, limit: number = 1000, modifiedTimeAfter?: string) {
+export async function driveCrawlAllAccessibleFiles(
+  tokens: DriveTokens, 
+  limit: number = 1000, 
+  modifiedTimeAfter?: string,
+  modifiedTimeBefore?: string
+) {
   const google = await getGoogle();
   const oauth2 = await createOAuthClient();
   oauth2.setCredentials(tokens);
   const drive = google.drive({ version: 'v3', auth: oauth2 });
 
-  // 쿼리 구성: modifiedTimeAfter가 있으면 추가
+  // 쿼리 구성: 연도 범위 필터 추가
   let query = 'trashed = false';
   if (modifiedTimeAfter) {
     query += ` and modifiedTime >= '${modifiedTimeAfter}'`;
+  }
+  if (modifiedTimeBefore) {
+    query += ` and modifiedTime <= '${modifiedTimeBefore}'`;
   }
 
   const results: any[] = [];
