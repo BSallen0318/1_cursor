@@ -218,44 +218,67 @@ export async function POST(req: Request) {
             console.log('🔍 최종 키워드:', keywords);
             debug.extractedKeywords = keywords;
             
-            // BM25 스타일 키워드 매칭 점수 계산
+            // BM25 스타일 키워드 매칭 점수 계산 (내용 중심)
             filtered = filtered.map((d: any) => {
               const title = (d.title || '').toLowerCase();
               const content = (d.content || '').toLowerCase();
               const snippet = (d.snippet || '').toLowerCase();
               
               let relevanceScore = 0;
+              const keywordsFoundInContent: string[] = []; // AND 검색용
               
               for (const keyword of keywords) {
                 const kw = keyword.toLowerCase();
                 
-                // 제목 매칭: 10000점 * 매칭 횟수
+                // 제목 매칭: 2000점 * 매칭 횟수 (10000 → 2000)
                 const titleMatches = (title.match(new RegExp(kw, 'g')) || []).length;
-                relevanceScore += titleMatches * 10000;
+                relevanceScore += titleMatches * 2000;
                 
-                // 스니펫 매칭: 1000점 * 매칭 횟수
+                // 스니펫 매칭: 500점 * 매칭 횟수 (1000 → 500)
                 const snippetMatches = (snippet.match(new RegExp(kw, 'g')) || []).length;
-                relevanceScore += snippetMatches * 1000;
+                relevanceScore += snippetMatches * 500;
                 
-                // 내용 매칭: 100점 * 매칭 횟수 (최대 10회까지만 카운트)
-                const contentMatches = Math.min(10, (content.match(new RegExp(kw, 'g')) || []).length);
-                relevanceScore += contentMatches * 100;
+                // 내용 매칭: 500점 * 매칭 횟수 (100 → 500, 최대 20회)
+                const contentMatches = Math.min(20, (content.match(new RegExp(kw, 'g')) || []).length);
+                relevanceScore += contentMatches * 500;
+                
+                // 내용에 키워드가 있으면 기록 (AND 검색용)
+                if (contentMatches > 0) {
+                  keywordsFoundInContent.push(kw);
+                }
+              }
+              
+              // 🎯 AND 검색 보너스: 모든 키워드가 내용에 있으면 +10000점
+              const allKeywordsInContent = keywords.length > 1 && 
+                keywordsFoundInContent.length === keywords.length;
+              
+              if (allKeywordsInContent) {
+                relevanceScore += 10000;
               }
               
               return {
                 ...d,
-                _relevance: relevanceScore
+                _relevance: relevanceScore,
+                _allKeywordsMatch: allKeywordsInContent
               };
             });
             
-            console.log(`  🎯 BM25 키워드 점수 계산 완료 (제목 10000x, 스니펫 1000x, 내용 100x)`);
+            console.log(`  🎯 BM25 키워드 점수 계산 완료 (제목 2000x, 스니펫 500x, 내용 500x, AND +10000)`);
             
-            // 상위 5개 BM25 점수 로깅
+            // 상위 5개 BM25 점수 로깅 (AND 매칭 포함)
             const topBM25 = [...filtered]
               .sort((a: any, b: any) => (b._relevance || 0) - (a._relevance || 0))
               .slice(0, 5)
-              .map((d: any) => ({ title: d.title.slice(0, 30), bm25: d._relevance }));
+              .map((d: any) => ({ 
+                title: d.title.slice(0, 30), 
+                bm25: d._relevance,
+                allMatch: d._allKeywordsMatch ? '✅ AND' : ''
+              }));
             console.log(`  📊 상위 BM25 점수:`, topBM25);
+            
+            // AND 매칭 문서 개수
+            const andMatchCount = filtered.filter((d: any) => d._allKeywordsMatch).length;
+            console.log(`  ✅ 모든 키워드 포함 문서: ${andMatchCount}개`);
             
             // RAG 필터링: titleMust, contentMust 조건 적용
             if (structuredQuery.titleMust && structuredQuery.titleMust.length > 0) {
@@ -547,7 +570,7 @@ export async function POST(req: Request) {
         // 정렬: Hybrid (BM25 + 임베딩) 점수 합산
         filtered.sort((a: any, b: any) => {
           // Hybrid 점수 = BM25 점수 + 임베딩 점수
-          // BM25: 10000점/키워드 (제목), 1000점 (스니펫), 100점 (내용)
+          // BM25: 2000점 (제목), 500점 (스니펫/내용), +10000점 (AND 보너스)
           // 임베딩: 0~100점 (0.0~1.0 * 100)
           const hybridA = (a._relevance || 0) + (a._embedScore || 0);
           const hybridB = (b._relevance || 0) + (b._embedScore || 0);
@@ -565,7 +588,8 @@ export async function POST(req: Request) {
             title: d.title.slice(0, 30), 
             bm25: d._relevance || 0, 
             embed: Math.round(d._embedScore || 0), 
-            hybrid: (d._relevance || 0) + (d._embedScore || 0)
+            hybrid: (d._relevance || 0) + (d._embedScore || 0),
+            andMatch: d._allKeywordsMatch ? '✅' : ''
           }));
         console.log(`🏆 최종 Hybrid 점수 (BM25 + 임베딩):`, topFinal);
 
