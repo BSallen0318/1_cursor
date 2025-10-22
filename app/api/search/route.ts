@@ -205,6 +205,45 @@ export async function POST(req: Request) {
             console.log('🔍 최종 키워드:', keywords);
             debug.extractedKeywords = keywords;
             
+            // BM25 스타일 키워드 매칭 점수 계산
+            filtered = filtered.map((d: any) => {
+              const title = (d.title || '').toLowerCase();
+              const content = (d.content || '').toLowerCase();
+              const snippet = (d.snippet || '').toLowerCase();
+              
+              let relevanceScore = 0;
+              
+              for (const keyword of keywords) {
+                const kw = keyword.toLowerCase();
+                
+                // 제목 매칭: 10000점 * 매칭 횟수
+                const titleMatches = (title.match(new RegExp(kw, 'g')) || []).length;
+                relevanceScore += titleMatches * 10000;
+                
+                // 스니펫 매칭: 1000점 * 매칭 횟수
+                const snippetMatches = (snippet.match(new RegExp(kw, 'g')) || []).length;
+                relevanceScore += snippetMatches * 1000;
+                
+                // 내용 매칭: 100점 * 매칭 횟수 (최대 10회까지만 카운트)
+                const contentMatches = Math.min(10, (content.match(new RegExp(kw, 'g')) || []).length);
+                relevanceScore += contentMatches * 100;
+              }
+              
+              return {
+                ...d,
+                _relevance: relevanceScore
+              };
+            });
+            
+            console.log(`  🎯 BM25 키워드 점수 계산 완료 (제목 10000x, 스니펫 1000x, 내용 100x)`);
+            
+            // 상위 5개 BM25 점수 로깅
+            const topBM25 = [...filtered]
+              .sort((a: any, b: any) => (b._relevance || 0) - (a._relevance || 0))
+              .slice(0, 5)
+              .map((d: any) => ({ title: d.title.slice(0, 30), bm25: d._relevance }));
+            console.log(`  📊 상위 BM25 점수:`, topBM25);
+            
             // RAG 필터링: titleMust, contentMust 조건 적용
             if (structuredQuery.titleMust && structuredQuery.titleMust.length > 0) {
               const beforeFilter = filtered.length;
@@ -425,9 +464,10 @@ export async function POST(req: Request) {
                 filteredByThreshold++;
               }
               
-              d._embedScore = finalScore * 1000;
-              d._titleEmbedScore = titleScore * 1000;
-              d._contentEmbedScore = contentScore * 1000;
+              // 임베딩 점수를 100배로 낮춤 (BM25 우선을 위해)
+              d._embedScore = finalScore * 100;  // 1000 → 100
+              d._titleEmbedScore = titleScore * 100;
+              d._contentEmbedScore = contentScore * 100;
             }
             
             console.log(`  ⚠️ Threshold (${SIMILARITY_THRESHOLD}) 미만 필터링: ${filteredByThreshold}개`);
@@ -440,9 +480,9 @@ export async function POST(req: Request) {
               .slice(0, 10)
               .map((d: any) => ({ 
                 title: d.title, 
-                totalScore: ((d._embedScore || 0) / 1000).toFixed(3),
-                titleScore: ((d._titleEmbedScore || 0) / 1000).toFixed(3),
-                contentScore: ((d._contentEmbedScore || 0) / 1000).toFixed(3)
+                totalScore: ((d._embedScore || 0) / 100).toFixed(3),  // 1000 → 100
+                titleScore: ((d._titleEmbedScore || 0) / 100).toFixed(3),
+                contentScore: ((d._contentEmbedScore || 0) / 100).toFixed(3)
               }));
             debug.topSemanticScores = topScores;
             debug.multiVectorEnabled = true;
@@ -455,14 +495,20 @@ export async function POST(req: Request) {
             for (const d of filtered) {
               const titleScore = titleSims[d.id] || 0;
               const contentScore = contentSims[d.id] || 0;
-              const embedScore = contentScore > 0 
-                ? (titleScore * TITLE_WEIGHT + contentScore * CONTENT_WEIGHT) * 1000
-                : titleScore * 1000;
+              let embedScore = contentScore > 0 
+                ? (titleScore * TITLE_WEIGHT + contentScore * CONTENT_WEIGHT)
+                : titleScore;
+              
+              // Threshold 적용
+              if (embedScore < SIMILARITY_THRESHOLD) {
+                embedScore = 0;
+              }
+              
               mergedMap.set(d.id, { 
                 ...d, 
-                _embedScore: embedScore,
-                _titleEmbedScore: titleScore * 1000,
-                _contentEmbedScore: contentScore * 1000
+                _embedScore: embedScore * 100,  // 1000 → 100
+                _titleEmbedScore: titleScore * 100,
+                _contentEmbedScore: contentScore * 100
               });
             }
             for (const d of similarDocs) {
@@ -485,25 +531,30 @@ export async function POST(req: Request) {
           }
         }
 
-        // 정렬: DB에서 계산한 _relevance 우선, 그 다음 _embedScore
+        // 정렬: Hybrid (BM25 + 임베딩) 점수 합산
         filtered.sort((a: any, b: any) => {
-          // DB _relevance가 있으면 최우선 (제목 가중치 10000점)
-          const relevanceA = a._relevance || 0;
-          const relevanceB = b._relevance || 0;
-          if (relevanceB !== relevanceA) return relevanceB - relevanceA;
+          // Hybrid 점수 = BM25 점수 + 임베딩 점수
+          // BM25: 10000점/키워드 (제목), 1000점 (스니펫), 100점 (내용)
+          // 임베딩: 0~100점 (0.0~1.0 * 100)
+          const hybridA = (a._relevance || 0) + (a._embedScore || 0);
+          const hybridB = (b._relevance || 0) + (b._embedScore || 0);
           
-          // _embedScore가 있으면 다음 우선 (Gemini 유사도)
-          const embedA = a._embedScore || 0;
-          const embedB = b._embedScore || 0;
-          if (embedB !== embedA) return embedB - embedA;
+          if (hybridB !== hybridA) return hybridB - hybridA;
           
-          // 나머지
-          const titleDiff = b._titleScore - a._titleScore;
-          if (titleDiff !== 0) return titleDiff;
-          const contentDiff = b._contentScore - a._contentScore;
-          if (contentDiff !== 0) return contentDiff;
+          // 동점일 경우 최신순
           return b._recency - a._recency;
         });
+        
+        // 상위 10개 최종 점수 로깅
+        const topFinal = filtered
+          .slice(0, 10)
+          .map((d: any) => ({ 
+            title: d.title.slice(0, 30), 
+            bm25: d._relevance || 0, 
+            embed: Math.round(d._embedScore || 0), 
+            hybrid: (d._relevance || 0) + (d._embedScore || 0)
+          }));
+        console.log(`🏆 최종 Hybrid 점수 (BM25 + 임베딩):`, topFinal);
 
         // 페이지네이션
         const total = filtered.length;
