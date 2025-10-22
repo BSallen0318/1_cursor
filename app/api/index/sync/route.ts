@@ -279,12 +279,17 @@ export async function POST(req: Request) {
         }
 
         if (figmaToken) {
-          // 증분 색인 여부 확인
-          let lastSyncTime: Date | undefined = undefined;
-          if (incremental) {
+          // 연도 범위 필터 또는 증분 색인
+          let filterAfter: Date | undefined = undefined;
+          
+          if (yearRange) {
+            // 연도 범위 필터: 시작 날짜를 필터로 사용
+            filterAfter = new Date(yearRange.start);
+            console.log(`📅 Figma 연도별 색인: ${yearRange.start.slice(0,4)}~${yearRange.end.slice(0,4)} (${yearRange.start} 이후 문서)...`);
+          } else if (incremental) {
             const lastSync = await getMetadata('figma_last_sync');
             if (lastSync) {
-              lastSyncTime = new Date(lastSync);
+              filterAfter = new Date(lastSync);
               console.log(`🔄 Figma 증분 색인 시작 (${lastSync} 이후 수정된 문서)...`);
             } else {
               console.log('🔄 Figma 전체 색인 시작 (첫 색인)...');
@@ -322,14 +327,24 @@ export async function POST(req: Request) {
             } catch {}
           }
 
-          // 증분 색인: 마지막 색인 시간 이후 수정된 파일만 필터링
-          if (lastSyncTime) {
+          console.log(`📦 수집된 총 Figma 파일: ${allFiles.length}개`);
+
+          // 시작 날짜 필터 (yearRange 또는 incremental)
+          if (filterAfter) {
             const beforeCount = allFiles.length;
-            allFiles = allFiles.filter(f => new Date(f.last_modified) > lastSyncTime!);
-            console.log(`🎨 Figma 파일 ${allFiles.length}개 수집 완료 (전체 ${beforeCount}개 중 필터링)`);
-          } else {
-            console.log(`🎨 Figma 파일 ${allFiles.length}개 수집 완료`);
+            allFiles = allFiles.filter(f => new Date(f.last_modified) > filterAfter!);
+            console.log(`📅 시작 날짜 필터: ${beforeCount}개 → ${allFiles.length}개`);
           }
+
+          // 연도 범위 종료 날짜 필터
+          if (yearRange) {
+            const endDate = new Date(yearRange.end);
+            const beforeCount = allFiles.length;
+            allFiles = allFiles.filter(f => new Date(f.last_modified) <= endDate);
+            console.log(`📅 연도 필터 적용: ${beforeCount}개 → ${allFiles.length}개 (${yearRange.start.slice(0,4)}~${yearRange.end.slice(0,4)})`);
+          }
+          
+          console.log(`✅ 최종 Figma 색인: ${allFiles.length}개`);
 
           // DB 저장 형식으로 변환 (메타데이터만)
           const docRecords: DocRecord[] = allFiles.map((f) => {
@@ -356,8 +371,15 @@ export async function POST(req: Request) {
 
           const count = await getDocumentCount('figma');
           
-          // 타임스탬프는 업데이트하지 않음 (계속 전체 범위에서 수집 가능하도록)
-          console.log('📅 Figma 색인 완료 (타임스탬프 유지 - 다음 색인 시 계속 수집 가능)');
+          // 타임스탬프 업데이트 (yearRange가 있으면 건너뜀)
+          if (incremental && !yearRange) {
+            await setMetadata('figma_last_sync', new Date().toISOString());
+            console.log('📅 Figma 증분 색인 타임스탬프 업데이트');
+          } else if (yearRange) {
+            console.log('📅 Figma 연도별 색인 완료 (타임스탬프 유지)');
+          } else {
+            console.log('📅 Figma 색인 완료 (타임스탬프 유지)');
+          }
 
           results.platforms.figma = {
             success: true,
@@ -394,9 +416,14 @@ export async function POST(req: Request) {
           };
           console.log('⚠️ Jira 설정 없음');
         } else {
-          // 증분 색인 여부 확인
+          // 연도 범위 필터 또는 증분 색인
           let updatedAfter: string | undefined = undefined;
-          if (incremental) {
+          
+          if (yearRange) {
+            // 연도 범위 필터: 시작 날짜를 필터로 사용
+            updatedAfter = yearRange.start;
+            console.log(`📅 Jira 연도별 색인: ${yearRange.start.slice(0,4)}~${yearRange.end.slice(0,4)} (${yearRange.start} 이후 이슈)...`);
+          } else if (incremental) {
             const lastSync = await getMetadata('jira_last_sync');
             if (lastSync) {
               updatedAfter = lastSync;
@@ -408,14 +435,28 @@ export async function POST(req: Request) {
             console.log('🔄 Jira 전체 색인 시작 (최대 100개)...');
           }
           
-          const { issues: allIssues } = await searchJiraIssuesByText(credentials, '', {
+          let { issues: allIssues } = await searchJiraIssuesByText(credentials, '', {
             projectKeys: [],  // 전체 검색
             maxResults: 100,
             daysBack: 365,
             updatedAfter
           });
 
-          console.log(`📋 Jira 이슈 ${allIssues.length}개 수집 완료`);
+          console.log(`📦 수집된 총 Jira 이슈: ${allIssues.length}개`);
+
+          // 연도 범위 종료 날짜 필터
+          if (yearRange) {
+            const endDate = new Date(yearRange.end);
+            const beforeCount = allIssues.length;
+            allIssues = allIssues.filter((issue: any) => {
+              const updated = issue.fields?.updated;
+              if (!updated) return false;
+              return new Date(updated) <= endDate;
+            });
+            console.log(`📅 연도 필터 적용: ${beforeCount}개 → ${allIssues.length}개 (${yearRange.start.slice(0,4)}~${yearRange.end.slice(0,4)})`);
+          }
+
+          console.log(`✅ 최종 Jira 색인: ${allIssues.length}개`);
 
           // DB 저장 형식으로 변환
           const docRecords: DocRecord[] = allIssues.map((issue) => {
@@ -446,8 +487,15 @@ export async function POST(req: Request) {
 
           const count = await getDocumentCount('jira');
           
-          // 타임스탬프는 업데이트하지 않음 (계속 전체 범위에서 수집 가능하도록)
-          console.log('📅 Jira 색인 완료 (타임스탬프 유지 - 다음 색인 시 계속 수집 가능)');
+          // 타임스탬프 업데이트 (yearRange가 있으면 건너뜀)
+          if (incremental && !yearRange) {
+            await setMetadata('jira_last_sync', new Date().toISOString());
+            console.log('📅 Jira 증분 색인 타임스탬프 업데이트');
+          } else if (yearRange) {
+            console.log('📅 Jira 연도별 색인 완료 (타임스탬프 유지)');
+          } else {
+            console.log('📅 Jira 색인 완료 (타임스탬프 유지)');
+          }
 
           results.platforms.jira = {
             success: true,

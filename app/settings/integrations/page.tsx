@@ -396,17 +396,61 @@ export default function IntegrationsPage() {
               <div className="space-y-3">
                 <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3 flex items-center gap-2">
                   <span className="text-lg">🎨</span>
-                  <span>Figma</span>
+                  <span>Figma (연도별)</span>
                 </div>
                 
                 <button
-                  onClick={() => startSync(['figma'], 'normal')}
+                  onClick={() => startSync(['figma'], 'normal', { start: '2015-01-01T00:00:00Z', end: '2018-12-31T23:59:59Z' })}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">2015~2018년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => startSync(['figma'], 'normal', { start: '2019-01-01T00:00:00Z', end: '2020-12-31T23:59:59Z' })}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">2019~2020년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => startSync(['figma'], 'normal', { start: '2021-01-01T00:00:00Z', end: '2022-12-31T23:59:59Z' })}
                   disabled={syncing}
                   className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <div className="text-left">
-                    <div className="font-bold text-sm">Figma 색인</div>
-                    <div className="text-xs opacity-80">모든 파일 수집</div>
+                    <div className="font-bold text-sm">2021~2022년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => startSync(['figma'], 'normal', { start: '2023-01-01T00:00:00Z', end: '2024-12-31T23:59:59Z' })}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">2023~2024년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => startSync(['figma'], 'normal', { start: '2025-01-01T00:00:00Z', end: '2026-12-31T23:59:59Z' })}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">2025~2026년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
                   </div>
                 </button>
               </div>
@@ -415,17 +459,61 @@ export default function IntegrationsPage() {
               <div className="space-y-3">
                 <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3 flex items-center gap-2">
                   <span className="text-lg">📋</span>
-                  <span>Jira</span>
+                  <span>Jira (연도별)</span>
                 </div>
                 
                 <button
-                  onClick={() => startSync(['jira'], 'normal')}
+                  onClick={() => startSync(['jira'], 'normal', { start: '2015-01-01T00:00:00Z', end: '2018-12-31T23:59:59Z' })}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">2015~2018년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => startSync(['jira'], 'normal', { start: '2019-01-01T00:00:00Z', end: '2020-12-31T23:59:59Z' })}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">2019~2020년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => startSync(['jira'], 'normal', { start: '2021-01-01T00:00:00Z', end: '2022-12-31T23:59:59Z' })}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">2021~2022년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => startSync(['jira'], 'normal', { start: '2023-01-01T00:00:00Z', end: '2024-12-31T23:59:59Z' })}
                   disabled={syncing}
                   className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <div className="text-left">
-                    <div className="font-bold text-sm">Jira 색인</div>
-                    <div className="text-xs opacity-80">모든 이슈 수집</div>
+                    <div className="font-bold text-sm">2023~2024년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => startSync(['jira'], 'normal', { start: '2025-01-01T00:00:00Z', end: '2026-12-31T23:59:59Z' })}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">2025~2026년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
                   </div>
                 </button>
               </div>
