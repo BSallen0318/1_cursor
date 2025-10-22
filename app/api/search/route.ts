@@ -189,6 +189,21 @@ export async function POST(req: Request) {
           return 0;
         };
 
+        // 🎯 제목 필터링: title 또는 both 모드에서 제목에 키워드가 포함되지 않은 문서 제외
+        if ((searchMode === 'title' || searchMode === 'both') && finalTitleQuery.trim()) {
+          const titleKeywords = finalTitleQuery.toLowerCase().split(/[\s,.\-_]+/).filter(w => w.length >= 2);
+          const beforeTitleFilter = filtered.length;
+          filtered = filtered.filter((d: any) => {
+            const lowerTitle = d.title.toLowerCase();
+            // 모든 키워드 중 하나라도 제목에 포함되어야 함
+            return titleKeywords.some(kw => lowerTitle.includes(kw));
+          });
+          console.log(`🔍 제목 필터링 (mode: ${searchMode}): ${beforeTitleFilter}개 → ${filtered.length}개 (키워드: ${titleKeywords.join(', ')})`);
+          debug.titleFilterApplied = true;
+          debug.titleFilterKeywords = titleKeywords;
+          debug.titleFilteredCount = filtered.length;
+        }
+        
         // 점수 계산
         filtered = filtered.map((d: any) => ({
           ...d,
@@ -247,7 +262,8 @@ export async function POST(req: Request) {
             const mergedKeywords = [...keywords, ...rawKeywords];
             
             // 🚨 키워드 재분리 및 필터링 (공백 제거 + 초고빈도 제거)
-            const highFreqStopWords = ['q', 'Q', '문서', '관련', '찾아', '알려', '보여', '주세요', '해줘', '언급', '들어간', '있는', '있어', '있나', '뭐', '어디', '어떻게', '파일', '내용', '방'];
+            // 🚨 "방"을 stopWords에서 제거 (사용자가 "비밀번호 방" 같은 검색을 할 수 있음)
+            const highFreqStopWords = ['q', 'Q', '문서', '관련', '찾아', '알려', '보여', '주세요', '해줘', '언급', '들어간', '있는', '있어', '있나', '뭐', '어디', '어떻게', '파일', '내용'];
             
             // 1. 모든 키워드를 공백/특수문자로 재분리
             const resplitKeywords: string[] = [];
@@ -295,52 +311,61 @@ export async function POST(req: Request) {
             console.log('🔍 최종 키워드:', keywords);
             debug.extractedKeywords = keywords;
             
-            // BM25 스타일 키워드 매칭 점수 계산 (내용 중심)
+            // 🎯 BM25 스타일 키워드 매칭 점수 계산 (내용 중심)
             filtered = filtered.map((d: any) => {
               const title = (d.title || '').toLowerCase();
               const content = (d.content || '').toLowerCase();
               const snippet = (d.snippet || '').toLowerCase();
               
               let relevanceScore = 0;
+              const keywordsFoundInTitle: string[] = [];
               const keywordsFoundInContent: string[] = []; // AND 검색용
               
               for (const keyword of keywords) {
                 const kw = keyword.toLowerCase();
                 
-                // 제목 매칭: 2000점 * 매칭 횟수 (10000 → 2000)
+                // 제목 매칭: 5000점 * 매칭 횟수 (2000 → 5000, 더 강화)
                 const titleMatches = (title.match(new RegExp(kw, 'g')) || []).length;
-                relevanceScore += titleMatches * 2000;
+                relevanceScore += titleMatches * 5000;
+                if (titleMatches > 0) {
+                  keywordsFoundInTitle.push(kw);
+                }
                 
-                // 스니펫 매칭: 500점 * 매칭 횟수 (1000 → 500)
+                // 스니펫 매칭: 1000점 * 매칭 횟수 (500 → 1000)
                 const snippetMatches = (snippet.match(new RegExp(kw, 'g')) || []).length;
-                relevanceScore += snippetMatches * 500;
+                relevanceScore += snippetMatches * 1000;
                 
-                // 내용 매칭: 500점 * 매칭 횟수 (100 → 500, 최대 20회)
+                // 내용 매칭: 1000점 * 매칭 횟수 (500 → 1000, 최대 20회)
                 const contentMatches = Math.min(20, (content.match(new RegExp(kw, 'g')) || []).length);
-                relevanceScore += contentMatches * 500;
+                relevanceScore += contentMatches * 1000;
                 
                 // 내용에 키워드가 있으면 기록 (AND 검색용)
-                if (contentMatches > 0) {
+                if (contentMatches > 0 || titleMatches > 0) {
                   keywordsFoundInContent.push(kw);
                 }
               }
               
-              // 🎯 AND 검색 보너스: 모든 키워드가 내용에 있으면 +10000점
+              // 🎯 AND 검색 보너스: 모든 키워드가 제목+내용에 있으면 +50000점 (10000 → 50000, 대폭 강화)
               const allKeywordsInContent = keywords.length > 1 && 
                 keywordsFoundInContent.length === keywords.length;
               
               if (allKeywordsInContent) {
-                relevanceScore += 10000;
+                relevanceScore += 50000;
               }
+              
+              // 🚨 키워드가 하나라도 없으면 페널티 (임베딩만으로 상위에 오는 것 방지)
+              const hasAnyKeyword = keywordsFoundInContent.length > 0;
               
               return {
                 ...d,
                 _relevance: relevanceScore,
-                _allKeywordsMatch: allKeywordsInContent
+                _allKeywordsMatch: allKeywordsInContent,
+                _hasKeyword: hasAnyKeyword,
+                _keywordMatchCount: keywordsFoundInContent.length
               };
             });
             
-            console.log(`  🎯 BM25 키워드 점수 계산 완료 (제목 2000x, 스니펫 500x, 내용 500x, AND +10000)`);
+            console.log(`  🎯 BM25 키워드 점수 계산 완료 (제목 5000x, 스니펫 1000x, 내용 1000x, AND +50000)`);
             
             // 상위 5개 BM25 점수 로깅 (AND 매칭 포함)
             const topBM25 = [...filtered]
@@ -577,6 +602,12 @@ export async function POST(req: Request) {
                 filteredByThreshold++;
               }
               
+              // 🚨 키워드가 하나도 없으면 임베딩 점수 0 (임베딩만으로 상위에 오는 것 방지)
+              const hasKeyword = d._hasKeyword !== false; // undefined면 true (하위 호환성)
+              if (!hasKeyword) {
+                finalScore = 0;
+              }
+              
               // 임베딩 점수를 100배로 낮춤 (BM25 우선을 위해)
               d._embedScore = finalScore * 100;  // 1000 → 100
               d._titleEmbedScore = titleScore * 100;
@@ -617,6 +648,12 @@ export async function POST(req: Request) {
                 embedScore = 0;
               }
               
+              // 🚨 키워드가 하나도 없으면 임베딩 점수 0
+              const hasKeyword = (d as any)._hasKeyword !== false;
+              if (!hasKeyword) {
+                embedScore = 0;
+              }
+              
               mergedMap.set(d.id, { 
                 ...d, 
                 _embedScore: embedScore * 100,  // 1000 → 100
@@ -647,8 +684,8 @@ export async function POST(req: Request) {
         // 정렬: Hybrid (BM25 + 임베딩) 점수 합산
         filtered.sort((a: any, b: any) => {
           // Hybrid 점수 = BM25 점수 + 임베딩 점수
-          // BM25: 2000점 (제목), 500점 (스니펫/내용), +10000점 (AND 보너스)
-          // 임베딩: 0~100점 (0.0~1.0 * 100)
+          // BM25: 5000점 (제목), 1000점 (스니펫/내용), +50000점 (AND 보너스)
+          // 임베딩: 0~100점 (0.0~1.0 * 100, 키워드 없으면 0)
           const hybridA = (a._relevance || 0) + (a._embedScore || 0);
           const hybridB = (b._relevance || 0) + (b._embedScore || 0);
           

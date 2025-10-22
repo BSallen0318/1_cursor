@@ -29,6 +29,12 @@ function SourceButton({ source, active, onClick, icon, label }: { source: string
   );
 }
 
+// 최근 검색어 타입
+interface RecentSearch {
+  query: string;
+  mode: 'title' | 'content';
+}
+
 export default function SearchPage() {
   const [titleQuery, setTitleQuery] = useState(''); // 문서 제목 검색
   const [contentQuery, setContentQuery] = useState(''); // 내용 찾기 검색
@@ -39,7 +45,7 @@ export default function SearchPage() {
   const [filters, setFilters] = useState<any>({ source: 'all' });
   const [aiAnswer, setAiAnswer] = useState<{ question: string; answer: string } | null>(null);
   const [page, setPage] = useState(1);
-  const [recent, setRecent] = useState<string[]>([]);
+  const [recent, setRecent] = useState<RecentSearch[]>([]);
   const handleFiltersChange = useCallback((f: any) => setFilters(f), []);
   const abortRef = useRef<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
@@ -106,10 +112,15 @@ export default function SearchPage() {
         console.log('search-debug', json.debug);
       }
       
-      // 최근 검색어 저장 (제목 또는 내용 중 있는 것)
+      // 최근 검색어 저장 (제목/내용 구분)
       const searchTerm = titleQuery.trim() || contentQuery.trim();
       if (searchTerm) {
-        const next = [searchTerm, ...recent.filter((t) => t !== searchTerm)].slice(0, 10);
+        const searchItem: RecentSearch = {
+          query: searchTerm,
+          mode: searchMode === 'title' ? 'title' : 'content'
+        };
+        // 중복 제거 (같은 query가 있으면 제거)
+        const next = [searchItem, ...recent.filter((r) => r.query !== searchTerm)].slice(0, 10);
         setRecent(next);
         try { localStorage.setItem('recentSearches', JSON.stringify(next)); } catch {}
       }
@@ -134,13 +145,22 @@ export default function SearchPage() {
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('recentSearches') || '[]');
-      if (Array.isArray(saved)) setRecent(saved.slice(0, 10));
+      if (Array.isArray(saved)) {
+        // 하위 호환성: string[] → RecentSearch[]
+        const converted: RecentSearch[] = saved.map((item: any) => {
+          if (typeof item === 'string') {
+            return { query: item, mode: 'title' as const };
+          }
+          return item;
+        });
+        setRecent(converted.slice(0, 10));
+      }
     } catch {}
   }, []);
 
-  const removeRecent = (t: string) => {
+  const removeRecent = (query: string) => {
     setRecent((prev) => {
-      const next = prev.filter((x) => x !== t);
+      const next = prev.filter((x) => x.query !== query);
       try { localStorage.setItem('recentSearches', JSON.stringify(next)); } catch {}
       return next;
     });
@@ -171,7 +191,7 @@ export default function SearchPage() {
                 value={titleQuery} 
                 onChange={(e) => setTitleQuery(e.target.value)} 
                 onKeyDown={(e) => { if (e.key === 'Enter') { setPage(1); onSearch(); } }} 
-                placeholder="예: Q 멀티, UI 기획서, 로그인" 
+                placeholder="문서 이름에 포함된 키워드를 입력해주세요" 
                 className="w-full border-2 border-zinc-200 dark:border-zinc-700 rounded-xl px-5 h-12 text-base focus:border-blue-500 focus:outline-none transition-colors" 
               />
             </div>
@@ -279,27 +299,43 @@ export default function SearchPage() {
               </div>
               <ul className="space-y-2">
                 {Array.from({ length: 10 }).map((_, idx) => {
-                  const term = recent[idx];
+                  const item = recent[idx];
                   return (
                     <li 
                       key={idx} 
                       className={`flex items-center justify-between gap-2 py-2 px-3 rounded-lg ${
-                        term ? 'hover:bg-zinc-50 dark:hover:bg-zinc-900' : 'text-zinc-300 dark:text-zinc-700'
+                        item ? 'hover:bg-zinc-50 dark:hover:bg-zinc-900' : 'text-zinc-300 dark:text-zinc-700'
                       }`}
                       style={{ minHeight: '40px' }}
                     >
-                      {term ? (
+                      {item ? (
                         <>
                           <button 
-                            className="flex-1 text-left text-sm hover:text-green-600 dark:hover:text-green-400 transition-colors truncate" 
-                            onClick={() => { setTitleQuery(term); setPage(1); }}
+                            className="flex-1 text-left text-sm hover:text-green-600 dark:hover:text-green-400 transition-colors truncate flex items-center gap-2" 
+                            onClick={() => { 
+                              if (item.mode === 'title') {
+                                setTitleQuery(item.query);
+                                setContentQuery('');
+                              } else {
+                                setContentQuery(item.query);
+                                setTitleQuery('');
+                              }
+                              setPage(1); 
+                            }}
                           >
-                            {idx + 1}. {term}
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+                              item.mode === 'title' 
+                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' 
+                                : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                            }`}>
+                              {item.mode === 'title' ? '제목' : '내용'}
+                            </span>
+                            <span>{idx + 1}. {item.query}</span>
                           </button>
                           <button 
                             aria-label="remove" 
                             className="p-1 text-zinc-400 hover:text-red-500 dark:hover:text-red-400 transition-colors text-lg font-bold" 
-                            onClick={() => removeRecent(term)}
+                            onClick={() => removeRecent(item.query)}
                           >
                             ×
                           </button>
