@@ -192,25 +192,39 @@ export async function POST(req: Request) {
               debug.structuredQuery = structuredQuery;
             }
             
-            // 🚨 초고빈도 키워드 필터링 (너무 일반적인 단어 제외)
-            const highFreqStopWords = ['q', '문서', '방', '찾아', '알려', '보여', '주세요', '해줘', '관련', '언급', '들어간', '있는', '있어', '있나', '뭐', '어디', '어떻게'];
+            // 🚨 초고빈도 키워드 필터링 (3글자 미만 완전 제거)
+            const highFreqStopWords = ['문서', '관련', '찾아', '알려', '보여', '주세요', '해줘', '언급', '들어간', '있는', '있어', '있나', '뭐', '어디', '어떻게', '파일', '내용'];
+            
+            const beforeFilter = keywords.length;
             keywords = keywords.filter(kw => {
               const lower = kw.toLowerCase();
-              // 2글자 이하이면서 stopWords에 있으면 제외
-              if (lower.length <= 2 && (highFreqStopWords.includes(lower) || lower === 'q')) {
+              // 🚨 3글자 미만은 무조건 제외 (Q, 방, 게임 등)
+              if (lower.length < 3) {
                 return false;
               }
+              // stopWords도 제외
               return !highFreqStopWords.includes(lower);
             });
             
-            console.log('🔍 필터링된 키워드 (초고빈도 제외):', keywords);
+            console.log(`🔍 키워드 필터링 (3글자 미만 제거): ${beforeFilter}개 → ${keywords.length}개`, keywords);
             
-            // 변형 키워드 추가 (스마트하게)
+            // 🚨 키워드가 없으면 원본 쿼리에서 3글자 이상 단어 추출
+            if (keywords.length === 0) {
+              keywords = q.split(/[\s,.\-_]+/)
+                .filter(w => w.length >= 3)
+                .slice(0, 3);
+              console.log('⚠️ 필터링 후 키워드 없음 → 원본에서 3글자 이상 추출:', keywords);
+            }
+            
+            // 변형 키워드 추가 (스마트하게, 3글자 이상만)
             const expandedKeywords: string[] = [...keywords];
             for (const kw of keywords) {
-              // 2글자 단위로만 자르기 (의미 있는 단위)
-              if (kw.length >= 4) {
-                expandedKeywords.push(kw.slice(0, 2)); // 앞 2글자만
+              // 5글자 이상이면 앞 3글자도 추가 (예: "비밀번호" → "비밀")
+              if (kw.length >= 5) {
+                const prefix = kw.slice(0, 3);
+                if (prefix.length >= 3) {  // 3글자 이상만
+                  expandedKeywords.push(prefix);
+                }
               }
             }
             keywords = [...new Set(expandedKeywords)].slice(0, 5);

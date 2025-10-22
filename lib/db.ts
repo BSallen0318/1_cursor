@@ -277,14 +277,10 @@ export async function searchDocumentsSimple(query: string, options: {
     const words = query.toLowerCase()
       .split(/[\s,.\-_]+/)
       .map(w => w.replace(/[을를이가에서와과는도한줘를은]$/g, '')) // 조사 제거
-      .filter(w => w.length >= 2) // 2글자 이상만
-      .filter(w => {
-        // 2글자 이하이면서 매우 일반적인 단어는 제외
-        if (w.length <= 2 && (w === 'q' || w === 'Q' || stopWords.includes(w))) {
-          return false;
-        }
-        return !stopWords.includes(w);
-      }); // stop words 제거
+      .filter(w => w.length >= 3) // 🚨 3글자 이상만 (Q, 방 등 초고빈도 1-2글자 제외)
+      .filter(w => !stopWords.includes(w)); // stop words 제거
+    
+    console.log(`🔍 [DB] 3글자 이상 키워드만 필터링:`, words);
     
     // SQL LIKE 특수문자 이스케이프 (_, %, \ 등)
     const escapeLike = (str: string) => str.replace(/[_%\\]/g, '\\$&');
