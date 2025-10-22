@@ -223,8 +223,14 @@ export async function POST(req: Request) {
           try {
             const semanticStartTime = Date.now();
             
-            // 🎯 AI 분석용 쿼리: contentQuery 우선, 없으면 titleQuery
-            const aiQuery = finalContentQuery || finalTitleQuery;
+            // 🎯 AI 분석용 쿼리
+            // - content 모드: contentQuery
+            // - both 모드: contentQuery (제목 필터링은 이미 적용됨)
+            const aiQuery = searchMode === 'both' 
+              ? finalContentQuery  // both 모드는 무조건 contentQuery 사용!
+              : (finalContentQuery || finalTitleQuery);
+            
+            console.log(`🎯 AI 분석 쿼리 (${searchMode} 모드): "${aiQuery}"`);
             const [qv] = await embedTexts([aiQuery]);
             
             // RAG: 자연어 쿼리를 구조화된 형태로 파싱
@@ -681,9 +687,36 @@ export async function POST(req: Request) {
           }
         }
 
-        // 정렬: Hybrid (BM25 + 임베딩) 점수 합산
+        // 🎯 파일 타입별 우선순위 함수
+        const getFileTypePriority = (item: any): number => {
+          const mimeType = item.mime_type || '';
+          const kind = item.kind || '';
+          
+          // 우선순위 1: 문서 타입 (구글독스, 슬라이드, 시트, 피그마, 지라)
+          if (
+            mimeType.includes('document') ||
+            mimeType.includes('presentation') ||
+            mimeType.includes('spreadsheet') ||
+            kind === 'figma' ||
+            kind === 'jira' ||
+            item.platform === 'figma' ||
+            item.platform === 'jira'
+          ) {
+            return 1;
+          }
+          
+          // 우선순위 2: 기타 파일 (jpg, pdf, 등)
+          return 2;
+        };
+        
+        // 정렬: 파일 타입 우선순위 → Hybrid 점수 → 최종 수정 시간
         filtered.sort((a: any, b: any) => {
-          // Hybrid 점수 = BM25 점수 + 임베딩 점수
+          // 1단계: 파일 타입 우선순위
+          const priorityA = getFileTypePriority(a);
+          const priorityB = getFileTypePriority(b);
+          if (priorityA !== priorityB) return priorityA - priorityB;
+          
+          // 2단계: Hybrid 점수 = BM25 점수 + 임베딩 점수
           // BM25: 5000점 (제목), 1000점 (스니펫/내용), +50000점 (AND 보너스)
           // 임베딩: 0~100점 (0.0~1.0 * 100, 키워드 없으면 0)
           const hybridA = (a._relevance || 0) + (a._embedScore || 0);
@@ -691,21 +724,54 @@ export async function POST(req: Request) {
           
           if (hybridB !== hybridA) return hybridB - hybridA;
           
-          // 동점일 경우 최신순
+          // 3단계: 동점일 경우 최신순
           return b._recency - a._recency;
         });
         
-        // 상위 10개 최종 점수 로깅
-        const topFinal = filtered
-          .slice(0, 10)
-          .map((d: any) => ({ 
-            title: d.title.slice(0, 30), 
-            bm25: d._relevance || 0, 
-            embed: Math.round(d._embedScore || 0), 
-            hybrid: (d._relevance || 0) + (d._embedScore || 0),
-            andMatch: d._allKeywordsMatch ? '✅' : ''
-          }));
-        console.log(`🏆 최종 Hybrid 점수 (BM25 + 임베딩):`, topFinal);
+        // 🎯 상위 10개 최종 점수 상세 로깅 (배점 이유 표시)
+        console.log(`\n========================================`);
+        console.log(`🏆 최종 검색 결과 (상위 10개)`);
+        console.log(`검색 모드: ${searchMode}`);
+        console.log(`제목 쿼리: "${finalTitleQuery}"`);
+        console.log(`내용 쿼리: "${finalContentQuery}"`);
+        if (debug.extractedKeywords) {
+          console.log(`추출된 키워드: [${debug.extractedKeywords.join(', ')}]`);
+        }
+        console.log(`========================================\n`);
+        
+        filtered.slice(0, 10).forEach((d: any, idx: number) => {
+          const bm25 = d._relevance || 0;
+          const embedScore = d._embedScore || 0;
+          const hybrid = bm25 + embedScore;
+          const priority = getFileTypePriority(d);
+          
+          console.log(`\n📄 ${idx + 1}. "${d.title}"`);
+          console.log(`   파일 타입: ${d.mime_type || d.kind || 'unknown'} (우선순위: ${priority})`);
+          console.log(`   플랫폼: ${d.platform}`);
+          console.log(`   최종 수정: ${d.updatedAt}`);
+          console.log(`   ───────────────────────────────────`);
+          console.log(`   📊 BM25 점수: ${bm25.toLocaleString()}점`);
+          if (d._keywordMatchCount !== undefined) {
+            const totalKeywords = debug.extractedKeywords ? debug.extractedKeywords.length : '?';
+            console.log(`      ├─ 매칭된 키워드 수: ${d._keywordMatchCount}/${totalKeywords}`);
+          }
+          if (d._allKeywordsMatch) {
+            console.log(`      ├─ ✅ 모든 키워드 매칭 보너스: +50,000점`);
+          }
+          console.log(`   🧠 임베딩 점수: ${Math.round(embedScore)}점`);
+          if (d._titleEmbedScore !== undefined) {
+            console.log(`      ├─ 제목 유사도: ${Math.round(d._titleEmbedScore)}점`);
+          }
+          if (d._contentEmbedScore !== undefined) {
+            console.log(`      ├─ 내용 유사도: ${Math.round(d._contentEmbedScore)}점`);
+          }
+          if (!d._hasKeyword) {
+            console.log(`      └─ ⚠️ 키워드 미포함 (임베딩 점수 0 처리)`);
+          }
+          console.log(`   🎯 최종 Hybrid 점수: ${hybrid.toLocaleString()}점`);
+        });
+        
+        console.log(`\n========================================\n`);
 
         // 페이지네이션
         // 🎯 제목만 검색은 페이지네이션, 내용 찾기는 상위 10개만

@@ -32,7 +32,9 @@ function SourceButton({ source, active, onClick, icon, label }: { source: string
 // 최근 검색어 타입
 interface RecentSearch {
   query: string;
-  mode: 'title' | 'content';
+  mode: 'title' | 'content' | 'both';
+  titleQuery?: string;  // both 모드일 때 사용
+  contentQuery?: string; // both 모드일 때 사용
 }
 
 export default function SearchPage() {
@@ -112,15 +114,24 @@ export default function SearchPage() {
         console.log('search-debug', json.debug);
       }
       
-      // 최근 검색어 저장 (제목/내용 구분)
-      const searchTerm = titleQuery.trim() || contentQuery.trim();
-      if (searchTerm) {
-        const searchItem: RecentSearch = {
-          query: searchTerm,
-          mode: searchMode === 'title' ? 'title' : 'content'
-        };
+      // 최근 검색어 저장 (제목/내용/복합 구분)
+      if (titleQuery.trim() || contentQuery.trim()) {
+        const searchItem: RecentSearch = searchMode === 'both'
+          ? {
+              // 복합 모드: (제목4글자/내용4글자)
+              query: `(${titleQuery.trim().slice(0, 4)}/${contentQuery.trim().slice(0, 4)})`,
+              mode: 'both',
+              titleQuery: titleQuery.trim(),
+              contentQuery: contentQuery.trim()
+            }
+          : {
+              // 단일 모드
+              query: titleQuery.trim() || contentQuery.trim(),
+              mode: searchMode === 'title' ? 'title' : 'content'
+            };
+        
         // 중복 제거 (같은 query가 있으면 제거)
-        const next = [searchItem, ...recent.filter((r) => r.query !== searchTerm)].slice(0, 10);
+        const next = [searchItem, ...recent.filter((r) => r.query !== searchItem.query)].slice(0, 10);
         setRecent(next);
         try { localStorage.setItem('recentSearches', JSON.stringify(next)); } catch {}
       }
@@ -150,6 +161,10 @@ export default function SearchPage() {
         const converted: RecentSearch[] = saved.map((item: any) => {
           if (typeof item === 'string') {
             return { query: item, mode: 'title' as const };
+          }
+          // mode가 없는 구버전 객체 처리
+          if (!item.mode) {
+            return { ...item, mode: 'title' as const };
           }
           return item;
         });
@@ -316,9 +331,12 @@ export default function SearchPage() {
                               if (item.mode === 'title') {
                                 setTitleQuery(item.query);
                                 setContentQuery('');
-                              } else {
+                              } else if (item.mode === 'content') {
                                 setContentQuery(item.query);
                                 setTitleQuery('');
+                              } else if (item.mode === 'both') {
+                                setTitleQuery(item.titleQuery || '');
+                                setContentQuery(item.contentQuery || '');
                               }
                               setPage(1); 
                             }}
@@ -326,9 +344,11 @@ export default function SearchPage() {
                             <span className={`text-xs px-1.5 py-0.5 rounded ${
                               item.mode === 'title' 
                                 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' 
-                                : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                                : item.mode === 'content'
+                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                                : 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
                             }`}>
-                              {item.mode === 'title' ? '제목' : '내용'}
+                              {item.mode === 'title' ? '제목' : item.mode === 'content' ? '내용' : '복합'}
                             </span>
                             <span>{idx + 1}. {item.query}</span>
                           </button>
