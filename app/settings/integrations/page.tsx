@@ -583,7 +583,7 @@ export default function IntegrationsPage() {
               <ul className="list-disc list-inside space-y-1 text-blue-800 dark:text-blue-200 ml-2">
                 <li><strong>색인 버튼:</strong> 문서 메타데이터만 수집 (제목, 링크, 작성자, 날짜 등)</li>
                 <li><strong>문서 추출 버튼:</strong> 문서의 실제 내용 (텍스트)을 수집하여 DB에 저장 (최대 200,000자)</li>
-                <li><strong>추출된 내용이 있어야</strong> "🔍 내용 찾기" 검색에서 AI가 문서 내용을 분석할 수 있습니다</li>
+                <li><strong>추출된 내용이 있어야</strong> &quot;🔍 내용 찾기&quot; 검색에서 AI가 문서 내용을 분석할 수 있습니다</li>
                 <li>구글 독스/슬라이드/시트, 피그마만 지원 (jpg, pdf 등은 추출 불가)</li>
               </ul>
             </div>
