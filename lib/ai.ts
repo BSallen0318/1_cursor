@@ -357,3 +357,158 @@ function fallbackKeywordExtraction(query: string): string[] {
   
   return [...new Set(transformed)].slice(0, 5);
 }
+
+// 🎯 Gemini Grounding: 검색된 문서를 기반으로 정확한 답변 생성
+export async function generateGroundedAnswer(
+  query: string,
+  documents: Array<{ id: string; title: string; content: string; url?: string }>
+): Promise<{ answer: string; citations: Array<{ docId: string; title: string; url?: string }> }> {
+  const provider = resolveProvider();
+  const DEBUG = process.env.AI_DEBUG === '1' || process.env.AI_DEBUG === 'true';
+  
+  if (DEBUG) console.log(`[Grounding] 질문: "${query}"`);
+  if (DEBUG) console.log(`[Grounding] 문서 개수: ${documents.length}개`);
+  
+  // 문서 컨텍스트 생성 (각 문서에 번호 부여)
+  const contextParts = documents.map((doc, idx) => {
+    const docNumber = idx + 1;
+    const content = doc.content.slice(0, 10000); // 문서당 최대 10,000자
+    return `[문서 ${docNumber}] 제목: ${doc.title}\n내용:\n${content}\n`;
+  }).join('\n---\n\n');
+  
+  const prompt = [
+    '역할: 기업 문서 분석 전문가',
+    '',
+    '지시사항:',
+    '1. 아래 제공된 문서들만을 기반으로 질문에 답변하세요.',
+    '2. 문서에 없는 내용은 절대 추측하지 마세요.',
+    '3. 답변 시 반드시 출처를 [문서 N] 형식으로 명시하세요.',
+    '4. 여러 문서의 정보를 종합하여 완전한 답변을 작성하세요.',
+    '5. 답변 형식: 3~8개의 불릿 포인트 (-로 시작)',
+    '',
+    '제공된 문서:',
+    contextParts,
+    '',
+    `질문: ${query}`,
+    '',
+    '답변 (불릿 포인트 형식, 각 항목마다 [문서 N] 출처 표시):'
+  ].join('\n');
+  
+  if (DEBUG) {
+    console.log(`[Grounding] 프롬프트 길이: ${prompt.length}자`);
+    console.log(`[Grounding] 프롬프트 미리보기:`, prompt.slice(0, 500) + '...');
+  }
+  
+  if (provider === 'gemini') {
+    try {
+      const ctrl = new AbortController();
+      const timeout = setTimeout(() => ctrl.abort(), 15000); // 15초 타임아웃
+      const url = `${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+      
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,  // 낮은 temperature로 정확성 향상
+            maxOutputTokens: 1500,  // 충분한 답변 길이
+            topP: 0.9,
+            topK: 40
+          }
+        }),
+        signal: ctrl.signal
+      });
+      clearTimeout(timeout);
+      
+      const json: any = await res.json();
+      const answer: string | undefined = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      if (DEBUG) console.log(`[Grounding] 답변 생성 완료 (${answer?.length || 0}자)`);
+      
+      if (!answer || !answer.trim()) {
+        throw new Error('Gemini 응답 없음');
+      }
+      
+      // 출처 추출: [문서 N] 패턴 찾기
+      const citationMatches = answer.match(/\[문서 (\d+)\]/g) || [];
+      const citedDocNumbers = [...new Set(citationMatches.map(m => {
+        const match = m.match(/\[문서 (\d+)\]/);
+        return match ? parseInt(match[1]) : 0;
+      }).filter(n => n > 0))];
+      
+      const citations = citedDocNumbers.map(num => {
+        const doc = documents[num - 1]; // 0-based index
+        return doc ? {
+          docId: doc.id,
+          title: doc.title,
+          url: doc.url
+        } : null;
+      }).filter(Boolean) as Array<{ docId: string; title: string; url?: string }>;
+      
+      if (DEBUG) console.log(`[Grounding] 출처: ${citations.length}개 문서 인용`);
+      
+      return {
+        answer: answer.trim(),
+        citations
+      };
+    } catch (err: any) {
+      if (DEBUG) console.error('[Grounding] Gemini 에러:', err?.message);
+      throw err;
+    }
+  } else if (provider === 'openai') {
+    try {
+      const ctrl = new AbortController();
+      const timeout = setTimeout(() => ctrl.abort(), 15000);
+      
+      const res = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: OPENAI_MODEL,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.2,
+          max_tokens: 1500
+        }),
+        signal: ctrl.signal
+      });
+      clearTimeout(timeout);
+      
+      const json: any = await res.json();
+      const answer: string | undefined = json?.choices?.[0]?.message?.content;
+      
+      if (!answer || !answer.trim()) {
+        throw new Error('OpenAI 응답 없음');
+      }
+      
+      // 출처 추출 (Gemini와 동일)
+      const citationMatches = answer.match(/\[문서 (\d+)\]/g) || [];
+      const citedDocNumbers = [...new Set(citationMatches.map(m => {
+        const match = m.match(/\[문서 (\d+)\]/);
+        return match ? parseInt(match[1]) : 0;
+      }).filter(n => n > 0))];
+      
+      const citations = citedDocNumbers.map(num => {
+        const doc = documents[num - 1];
+        return doc ? {
+          docId: doc.id,
+          title: doc.title,
+          url: doc.url
+        } : null;
+      }).filter(Boolean) as Array<{ docId: string; title: string; url?: string }>;
+      
+      return {
+        answer: answer.trim(),
+        citations
+      };
+    } catch (err: any) {
+      if (DEBUG) console.error('[Grounding] OpenAI 에러:', err?.message);
+      throw err;
+    }
+  }
+  
+  throw new Error('AI provider not configured');
+}

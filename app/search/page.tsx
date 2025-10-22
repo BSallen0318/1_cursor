@@ -41,7 +41,7 @@ export default function SearchPage() {
   const [titleQuery, setTitleQuery] = useState(''); // 문서 제목 검색
   const [contentQuery, setContentQuery] = useState(''); // 내용 찾기 검색
   const [ask, setAsk] = useState('');
-  const [data, setData] = useState<{ items: DocItem[]; total: number } | null>(null);
+  const [data, setData] = useState<{ items: DocItem[]; total: number; groundedAnswer?: any } | null>(null);
   const [selected, setSelected] = useState<any | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filters, setFilters] = useState<any>({ source: 'all' });
@@ -51,8 +51,61 @@ export default function SearchPage() {
   const handleFiltersChange = useCallback((f: any) => setFilters(f), []);
   const abortRef = useRef<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generatingAnswer, setGeneratingAnswer] = useState(false); // Grounding 진행 중
   const [error, setError] = useState<string | null>(null);
   const [lastSearchMode, setLastSearchMode] = useState<'title' | 'content' | 'both'>('title'); // 마지막 검색 모드
+
+  // 🎯 AI 답변 생성 함수 (Grounding)
+  const onGenerateAnswer = async () => {
+    if (!data || data.items.length === 0) {
+      setError('검색 결과가 없습니다. 먼저 검색을 실행해주세요.');
+      return;
+    }
+    
+    setGeneratingAnswer(true);
+    setError(null);
+    
+    try {
+      const controller = new AbortController();
+      const searchQuery = titleQuery.trim() || contentQuery.trim();
+      
+      const res = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          titleQuery: titleQuery.trim() || undefined,
+          contentQuery: contentQuery.trim() || undefined,
+          page: 1,
+          size: 10,
+          filters,
+          generateAnswer: true  // 🎯 Grounding 요청!
+        }),
+        signal: controller.signal
+      });
+      
+      const json = await res.json();
+      
+      if (!res.ok) {
+        setError(json?.error || 'AI 답변 생성 실패');
+        return;
+      }
+      
+      if (json.groundedAnswer) {
+        // data에 groundedAnswer 추가
+        setData(prev => prev ? { ...prev, groundedAnswer: json.groundedAnswer } : null);
+        console.log('✅ AI 답변 생성 완료:', json.groundedAnswer);
+      } else {
+        setError('AI 답변을 생성할 수 없습니다. 문서 내용이 추출되지 않았거나 AI가 구성되지 않았습니다.');
+      }
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') {
+        setError(e?.message || 'AI 답변 생성 실패');
+      }
+    } finally {
+      setGeneratingAnswer(false);
+    }
+  };
 
   const onSearch = async () => {
     // 🚨 검색어 유효성 검사
@@ -388,6 +441,81 @@ export default function SearchPage() {
                 )}
                 {!loading && (titleQuery || contentQuery) && data && (
                   <>
+                    {/* AI 답변 생성 버튼 */}
+                    {!data.groundedAnswer && data.items.length > 0 && (
+                      <div className="mb-4">
+                        <button
+                          onClick={onGenerateAnswer}
+                          disabled={generatingAnswer}
+                          className={`w-full h-14 px-6 rounded-xl font-semibold transition-all shadow-md flex items-center justify-center gap-3 ${
+                            generatingAnswer
+                              ? 'bg-purple-400 cursor-wait'
+                              : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white'
+                          }`}
+                        >
+                          {generatingAnswer ? (
+                            <>
+                              <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                              <span>AI가 답변을 생성하고 있습니다...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-2xl">🤖</span>
+                              <span>AI가 검색 결과를 분석하여 답변 생성하기</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* Grounded Answer 표시 */}
+                    {data.groundedAnswer && (
+                      <div className="mb-4 p-6 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 rounded-2xl border-2 border-purple-300 dark:border-purple-700 shadow-lg">
+                        <div className="flex items-start gap-4 mb-4">
+                          <span className="text-3xl">🤖</span>
+                          <div className="flex-1">
+                            <div className="font-bold text-lg text-purple-900 dark:text-purple-100 mb-2">
+                              AI 답변 (상위 {data.groundedAnswer.documentCount}개 문서 기반)
+                            </div>
+                            <div className="text-sm text-purple-700 dark:text-purple-300 mb-1">
+                              질문: {data.groundedAnswer.question}
+                            </div>
+                            <div className="text-xs text-purple-600 dark:text-purple-400">
+                              생성 시간: {Math.round(data.groundedAnswer.generationTime / 1000)}초 | 
+                              인용: {data.groundedAnswer.citations.length}개 문서
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="prose dark:prose-invert max-w-none mb-4">
+                          <div className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                            {data.groundedAnswer.answer}
+                          </div>
+                        </div>
+                        
+                        {/* 출처 배지 */}
+                        {data.groundedAnswer.citations.length > 0 && (
+                          <div className="pt-4 border-t border-purple-200 dark:border-purple-800">
+                            <div className="text-xs font-semibold text-purple-700 dark:text-purple-300 mb-2">📚 출처:</div>
+                            <div className="flex flex-wrap gap-2">
+                              {data.groundedAnswer.citations.map((citation: any, idx: number) => (
+                                <a
+                                  key={idx}
+                                  href={citation.url || '#'}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-100 dark:bg-purple-900/50 border border-purple-300 dark:border-purple-700 hover:bg-purple-200 dark:hover:bg-purple-900 transition-colors text-xs font-medium text-purple-900 dark:text-purple-100"
+                                >
+                                  <span>📄</span>
+                                  <span className="truncate max-w-[200px]">{citation.title}</span>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
                     {/* 검색 모드 안내 */}
                     {(data as any)?.debug?.searchMode && (
                       <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 rounded-xl border-2 border-blue-200 dark:border-blue-800">

@@ -27,7 +27,8 @@ export async function POST(req: Request) {
     sort = 'relevance',
     fast = false,
     rerank = false,
-    useIndex = true  // DB 인덱스 사용 여부
+    useIndex = true,  // DB 인덱스 사용 여부
+    generateAnswer = false  // 🎯 Grounding: AI 답변 생성 여부
   }: {
     titleQuery?: string;
     contentQuery?: string;
@@ -39,6 +40,7 @@ export async function POST(req: Request) {
     fast?: boolean;
     rerank?: boolean;
     useIndex?: boolean;
+    generateAnswer?: boolean;
   } = body || {};
   
   // 🎯 검색 모드 결정
@@ -849,10 +851,68 @@ export async function POST(req: Request) {
           debug.ragIntent = debug.structuredQuery.intent;
         }
 
+        // 🎯 Gemini Grounding: AI 답변 생성 요청 시
+        let groundedAnswer: any = undefined;
+        if (generateAnswer && (hasGemini() || hasOpenAI())) {
+          try {
+            console.log(`🧠 Gemini Grounding 시작...`);
+            const groundingStartTime = Date.now();
+            
+            // 상위 5개 문서의 내용 수집 (content가 있는 것만)
+            const topDocsForGrounding = filtered
+              .filter((d: any) => d.content && d.content.trim().length > 100)
+              .slice(0, 5)
+              .map((d: any) => ({
+                id: d.id,
+                title: d.title,
+                content: d.content,
+                url: d.url
+              }));
+            
+            console.log(`   📚 Grounding 대상 문서: ${topDocsForGrounding.length}개`);
+            
+            if (topDocsForGrounding.length > 0) {
+              const { generateGroundedAnswer } = await import('@/lib/ai');
+              const userQuery = finalContentQuery || finalTitleQuery;
+              
+              const result = await generateGroundedAnswer(userQuery, topDocsForGrounding);
+              
+              groundedAnswer = {
+                question: userQuery,
+                answer: result.answer,
+                citations: result.citations,
+                documentCount: topDocsForGrounding.length,
+                generationTime: Date.now() - groundingStartTime
+              };
+              
+              console.log(`✅ Grounding 완료: ${result.citations.length}개 문서 인용, ${groundedAnswer.generationTime}ms 소요`);
+              debug.grounding = {
+                enabled: true,
+                documentCount: topDocsForGrounding.length,
+                citationCount: result.citations.length,
+                generationTime: groundedAnswer.generationTime
+              };
+            } else {
+              console.log(`⚠️ Grounding 불가: content가 있는 문서 없음`);
+              debug.grounding = {
+                enabled: false,
+                reason: 'no_content_available'
+              };
+            }
+          } catch (e: any) {
+            console.error(`❌ Grounding 실패:`, e?.message);
+            debug.grounding = {
+              enabled: false,
+              error: e?.message
+            };
+          }
+        }
+
         return NextResponse.json({
           items: paged,
           total,
           nextPageToken: undefined,
+          groundedAnswer,  // 🎯 Grounding 결과 추가
           debug
         });
       } else {
