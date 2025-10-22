@@ -136,8 +136,8 @@ export async function POST(req: Request) {
           // 기본 모드: 추가 색인 (최근 수정된 문서만)
           let modifiedTimeAfter: string | undefined = undefined;
           
-          // forceFullIndex가 true면 타임스탬프 무시
-          if (!forceFullIndex) {
+          // forceFullIndex 또는 yearRange가 있으면 타임스탬프 무시
+          if (!forceFullIndex && !yearRange) {
             const lastSync = await getMetadata('drive_last_sync');
             if (lastSync) {
               modifiedTimeAfter = lastSync;
@@ -145,6 +145,8 @@ export async function POST(req: Request) {
             } else {
               console.log('➕ 추가 색인 (타임스탬프 없음, 최신 3000개)...');
             }
+          } else if (yearRange) {
+            console.log(`📅 연도별 색인: ${yearRange.start.slice(0,4)}~${yearRange.end.slice(0,4)} 전체 문서 수집...`);
           } else {
             console.log('🔄 강제 전체 재색인: 모든 문서 다시 수집...');
           }
