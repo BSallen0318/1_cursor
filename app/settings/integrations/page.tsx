@@ -326,104 +326,114 @@ export default function IntegrationsPage() {
         <div className="bg-white dark:bg-zinc-950 rounded-2xl border-2 border-zinc-200 dark:border-zinc-800 p-6 shadow-md">
           <h3 className="text-lg font-bold mb-4">🚀 색인 실행</h3>
           
-          <div className="space-y-4">
-            {/* Google Drive 연도별 색인 */}
-            <div className="space-y-3">
-              <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">📊 Google Drive 색인 (연도별, 각 2000개)</div>
-              
-              <button
-                onClick={() => startSync(['drive'], 'normal', { start: '2015-01-01T00:00:00Z', end: '2018-12-31T23:59:59Z' })}
-                disabled={syncing}
-                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
-              >
-                <span className="text-2xl">📁</span>
-                <div>
-                  <div className="font-bold">2015~2018년 문서</div>
-                  <div className="text-xs opacity-80">해당 기간 수정된 문서 최대 2000개</div>
+          <div className="space-y-6">
+            {/* 3컬럼 레이아웃: Google Drive / Figma / Jira */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Google Drive 색인 */}
+              <div className="space-y-3">
+                <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3 flex items-center gap-2">
+                  <span className="text-lg">📊</span>
+                  <span>Google Drive (연도별)</span>
                 </div>
-              </button>
-              
-              <button
-                onClick={() => startSync(['drive'], 'normal', { start: '2019-01-01T00:00:00Z', end: '2020-12-31T23:59:59Z' })}
-                disabled={syncing}
-                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
-              >
-                <span className="text-2xl">📁</span>
-                <div>
-                  <div className="font-bold">2019~2020년 문서</div>
-                  <div className="text-xs opacity-80">해당 기간 수정된 문서 최대 2000개</div>
+                
+                <button
+                  onClick={() => startSync(['drive'], 'normal', { start: '2015-01-01T00:00:00Z', end: '2018-12-31T23:59:59Z' })}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">2015~2018년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => startSync(['drive'], 'normal', { start: '2019-01-01T00:00:00Z', end: '2020-12-31T23:59:59Z' })}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">2019~2020년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => startSync(['drive'], 'normal', { start: '2021-01-01T00:00:00Z', end: '2022-12-31T23:59:59Z' })}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">2021~2022년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => startSync(['drive'], 'normal', { start: '2023-01-01T00:00:00Z', end: '2024-12-31T23:59:59Z' })}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">2023~2024년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => startSync(['drive'], 'normal', { start: '2025-01-01T00:00:00Z', end: '2026-12-31T23:59:59Z' })}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">2025~2026년</div>
+                    <div className="text-xs opacity-80">최대 2000개</div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Figma 색인 */}
+              <div className="space-y-3">
+                <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3 flex items-center gap-2">
+                  <span className="text-lg">🎨</span>
+                  <span>Figma</span>
                 </div>
-              </button>
-              
-              <button
-                onClick={() => startSync(['drive'], 'normal', { start: '2021-01-01T00:00:00Z', end: '2022-12-31T23:59:59Z' })}
-                disabled={syncing}
-                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
-              >
-                <span className="text-2xl">📁</span>
-                <div>
-                  <div className="font-bold">2021~2022년 문서</div>
-                  <div className="text-xs opacity-80">해당 기간 수정된 문서 최대 2000개</div>
+                
+                <button
+                  onClick={() => startSync(['figma'], 'normal')}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">Figma 색인</div>
+                    <div className="text-xs opacity-80">모든 파일 수집</div>
+                  </div>
+                </button>
+              </div>
+
+              {/* Jira 색인 */}
+              <div className="space-y-3">
+                <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3 flex items-center gap-2">
+                  <span className="text-lg">📋</span>
+                  <span>Jira</span>
                 </div>
-              </button>
-              
-              <button
-                onClick={() => startSync(['drive'], 'normal', { start: '2023-01-01T00:00:00Z', end: '2024-12-31T23:59:59Z' })}
-                disabled={syncing}
-                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
-              >
-                <span className="text-2xl">📁</span>
-                <div>
-                  <div className="font-bold">2023~2024년 문서</div>
-                  <div className="text-xs opacity-80">해당 기간 수정된 문서 최대 2000개</div>
-                </div>
-              </button>
-              
-              <button
-                onClick={() => startSync(['drive'], 'normal', { start: '2025-01-01T00:00:00Z', end: '2026-12-31T23:59:59Z' })}
-                disabled={syncing}
-                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
-              >
-                <span className="text-2xl">📁</span>
-                <div>
-                  <div className="font-bold">2025~2026년 문서</div>
-                  <div className="text-xs opacity-80">해당 기간 수정된 문서 최대 2000개</div>
-                </div>
-              </button>
+                
+                <button
+                  onClick={() => startSync(['jira'], 'normal')}
+                  disabled={syncing}
+                  className="w-full h-16 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-left">
+                    <div className="font-bold text-sm">Jira 색인</div>
+                    <div className="text-xs opacity-80">모든 이슈 수집</div>
+                  </div>
+                </button>
+              </div>
             </div>
             
-            {/* Figma, Jira 색인 */}
-            <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
-              <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">🎨 Figma / 📋 Jira 색인</div>
-              
-              <button
-                onClick={() => startSync(['figma'], 'normal')}
-                disabled={syncing}
-                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
-              >
-                <span className="text-2xl">🎨</span>
-                <div>
-                  <div className="font-bold">Figma 색인</div>
-                  <div className="text-xs opacity-80">모든 Figma 파일 수집</div>
-                </div>
-              </button>
-              
-              <button
-                onClick={() => startSync(['jira'], 'normal')}
-                disabled={syncing}
-                className="w-full h-12 px-6 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-medium transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left flex items-center gap-3"
-              >
-                <span className="text-2xl">📋</span>
-                <div>
-                  <div className="font-bold">Jira 색인</div>
-                  <div className="text-xs opacity-80">모든 Jira 이슈 수집</div>
-                </div>
-              </button>
-            </div>
-            
-            {/* 추가 색인 */}
-            <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800">
-              <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">➕ 추가 색인 (최근 수정 문서)</div>
+            {/* 추가 색인 (전체 너비) */}
+            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
+              <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3">➕ 추가 색인 (최근 수정 문서)</div>
               <button
                 onClick={() => startSync(['drive', 'figma', 'jira'], 'normal')}
                 disabled={syncing}
