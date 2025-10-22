@@ -169,6 +169,42 @@ export async function POST(req: Request) {
           let allFiles = Array.from(mergedMap.values());
           
           console.log(`📦 수집된 총 문서: ${allFiles.length}개`);
+          
+          // 소유자 정보 분석
+          const ownerStats = {
+            myFiles: 0,
+            othersFiles: 0,
+            noOwnerInfo: 0,
+            sharedDriveFiles: 0,
+            mySharedDriveFiles: 0
+          };
+          
+          for (const f of allFiles) {
+            const isMe = f.owners?.[0]?.me === true;
+            const hasOwner = f.owners && f.owners.length > 0;
+            const isSharedDrive = !!f.driveId;
+            
+            if (!hasOwner) {
+              ownerStats.noOwnerInfo++;
+            } else if (isSharedDrive) {
+              ownerStats.sharedDriveFiles++;
+              if (isMe) {
+                ownerStats.mySharedDriveFiles++;
+              }
+            } else if (isMe) {
+              ownerStats.myFiles++;
+            } else {
+              ownerStats.othersFiles++;
+            }
+          }
+          
+          console.log(`👤 소유자 분석:`);
+          console.log(`  - 내 개인 드라이브 문서: ${ownerStats.myFiles}개`);
+          console.log(`  - 타인 문서: ${ownerStats.othersFiles}개`);
+          console.log(`  - 공유 드라이브 문서: ${ownerStats.sharedDriveFiles}개`);
+          console.log(`  - 공유 드라이브 내 내 문서: ${ownerStats.mySharedDriveFiles}개`);
+          console.log(`  - 소유자 정보 없음: ${ownerStats.noOwnerInfo}개`);
+          
           console.log(`✅ 최종 Drive 색인: ${allFiles.length}개 수집`);
           
           files = allFiles;
