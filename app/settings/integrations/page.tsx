@@ -292,7 +292,10 @@ export default function IntegrationsPage() {
                 <div className="text-xs text-green-600 dark:text-green-400 mt-2">
                   {indexStatus.platforms?.drive?.lastSync 
                     ? `⏰ ${new Date(indexStatus.platforms.drive.lastSync).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
-                    : '⚠️ 미동기화'
+                    : (indexStatus.platforms?.drive?.count > 0 
+                      ? '✅ 연도별 색인 완료 (추가 색인 버튼을 눌러 동기화 활성화)'
+                      : '⚠️ 미동기화'
+                    )
                   }
                 </div>
               </div>
@@ -302,7 +305,10 @@ export default function IntegrationsPage() {
                 <div className="text-xs text-purple-600 dark:text-purple-400 mt-2">
                   {indexStatus.platforms?.figma?.lastSync 
                     ? `⏰ ${new Date(indexStatus.platforms.figma.lastSync).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
-                    : '⚠️ 미동기화'
+                    : (indexStatus.platforms?.figma?.count > 0 
+                      ? '✅ 연도별 색인 완료 (추가 색인 버튼을 눌러 동기화 활성화)'
+                      : '⚠️ 미동기화'
+                    )
                   }
                 </div>
               </div>
@@ -312,7 +318,10 @@ export default function IntegrationsPage() {
                 <div className="text-xs text-orange-600 dark:text-orange-400 mt-2">
                   {indexStatus.platforms?.jira?.lastSync 
                     ? `⏰ ${new Date(indexStatus.platforms.jira.lastSync).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
-                    : '⚠️ 미동기화'
+                    : (indexStatus.platforms?.jira?.count > 0 
+                      ? '✅ 연도별 색인 완료 (추가 색인 버튼을 눌러 동기화 활성화)'
+                      : '⚠️ 미동기화'
+                    )
                   }
                 </div>
               </div>
