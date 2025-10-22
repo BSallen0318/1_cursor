@@ -192,6 +192,19 @@ export async function POST(req: Request) {
               debug.structuredQuery = structuredQuery;
             }
             
+            // 🚨 초고빈도 키워드 필터링 (너무 일반적인 단어 제외)
+            const highFreqStopWords = ['q', '문서', '방', '찾아', '알려', '보여', '주세요', '해줘', '관련', '언급', '들어간', '있는', '있어', '있나', '뭐', '어디', '어떻게'];
+            keywords = keywords.filter(kw => {
+              const lower = kw.toLowerCase();
+              // 2글자 이하이면서 stopWords에 있으면 제외
+              if (lower.length <= 2 && (highFreqStopWords.includes(lower) || lower === 'q')) {
+                return false;
+              }
+              return !highFreqStopWords.includes(lower);
+            });
+            
+            console.log('🔍 필터링된 키워드 (초고빈도 제외):', keywords);
+            
             // 변형 키워드 추가 (스마트하게)
             const expandedKeywords: string[] = [...keywords];
             for (const kw of keywords) {

@@ -268,24 +268,36 @@ export async function searchDocumentsSimple(query: string, options: {
     
     // 검색어를 단어로 분리
     const stopWords = [
+      'q', 'Q', // 초고빈도 1글자
       '찾아', '찾아줘', '알려', '알려줘', '보여', '주세요',
       '문서', '내용', '관련', '관련한', '대한', '에서', '있는', '있었', '있는지', '인지',
       '요청', '요청서', '해줘', '달라', '달라는', '라는', '하는', '되는', '이는', '그',
-      '어떤', '어디', '무엇', '누구', '언제', '왜', '어떻게'
+      '어떤', '어디', '무엇', '누구', '언제', '왜', '어떻게', '방', '파일'
     ];
     const words = query.toLowerCase()
       .split(/[\s,.\-_]+/)
       .map(w => w.replace(/[을를이가에서와과는도한줘를은]$/g, '')) // 조사 제거
       .filter(w => w.length >= 2) // 2글자 이상만
-      .filter(w => !stopWords.includes(w)); // stop words 제거
+      .filter(w => {
+        // 2글자 이하이면서 매우 일반적인 단어는 제외
+        if (w.length <= 2 && (w === 'q' || w === 'Q' || stopWords.includes(w))) {
+          return false;
+        }
+        return !stopWords.includes(w);
+      }); // stop words 제거
     
     // SQL LIKE 특수문자 이스케이프 (_, %, \ 등)
     const escapeLike = (str: string) => str.replace(/[_%\\]/g, '\\$&');
     
+    // 🎯 긴 키워드부터 우선 검색 (더 구체적인 키워드가 먼저)
+    const sortedWords = words.sort((a, b) => b.length - a.length);
+    
     // 각 단어를 개별 패턴으로 (이스케이프 적용)
-    const patterns = words.length > 0 
-      ? words.map(w => `%${escapeLike(w)}%`) 
+    const patterns = sortedWords.length > 0 
+      ? sortedWords.map(w => `%${escapeLike(w)}%`) 
       : [`%${escapeLike(query.toLowerCase())}%`];
+    
+    console.log(`🔍 [DB] 검색 키워드 (길이순):`, sortedWords);
     
     let result;
     
