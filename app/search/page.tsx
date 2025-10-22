@@ -30,7 +30,8 @@ function SourceButton({ source, active, onClick, icon, label }: { source: string
 }
 
 export default function SearchPage() {
-  const [q, setQ] = useState('');
+  const [titleQuery, setTitleQuery] = useState(''); // 문서 제목 검색
+  const [contentQuery, setContentQuery] = useState(''); // 내용 찾기 검색
   const [ask, setAsk] = useState('');
   const [data, setData] = useState<{ items: DocItem[]; total: number } | null>(null);
   const [selected, setSelected] = useState<any | null>(null);
@@ -43,27 +44,53 @@ export default function SearchPage() {
   const abortRef = useRef<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchContent, setSearchContent] = useState(false); // 내용 찾기 체크박스
-  const [lastSearchUsedContent, setLastSearchUsedContent] = useState(false); // 마지막 검색이 내용 찾기를 사용했는지
+  const [lastSearchMode, setLastSearchMode] = useState<'title' | 'content' | 'both'>('title'); // 마지막 검색 모드
 
   const onSearch = async () => {
+    // 🚨 검색어 유효성 검사
+    const hasTitleQuery = titleQuery.trim().length > 0;
+    const hasContentQuery = contentQuery.trim().length > 0;
+    
+    if (!hasTitleQuery && !hasContentQuery) {
+      setError('문서 제목 또는 내용 찾기 중 하나는 입력해주세요.');
+      return;
+    }
+    
     setLoading(true);
     setError(null);
     setData(null); // 이전 검색 결과 즉시 제거
-    setLastSearchUsedContent(searchContent); // 현재 검색이 내용 찾기를 사용하는지 저장
+    
+    // 검색 모드 결정
+    let searchMode: 'title' | 'content' | 'both' = 'title';
+    if (hasTitleQuery && hasContentQuery) {
+      searchMode = 'both';
+    } else if (hasContentQuery) {
+      searchMode = 'content';
+    }
+    setLastSearchMode(searchMode);
+    
     try {
       if (abortRef.current) abortRef.current.abort();
       const controller = new AbortController();
       abortRef.current = controller;
       
-      // 내용 찾기 체크 시 size=10으로 고정
-      const searchSize = searchContent ? 10 : 10;
+      // 🎯 검색 모드에 따라 size 결정
+      // - 제목만: 페이지네이션 (10개)
+      // - 내용/둘 다: AI 분석 (상위 10개 고정)
+      const searchSize = searchMode === 'title' ? 10 : 10;
       
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ q, page, size: searchSize, filters, sort: filters?.sort || 'relevance', fast: !searchContent }),
+        body: JSON.stringify({ 
+          titleQuery: titleQuery.trim() || undefined, 
+          contentQuery: contentQuery.trim() || undefined,
+          page, 
+          size: searchSize, 
+          filters, 
+          sort: filters?.sort || 'relevance'
+        }),
         signal: controller.signal
       });
       const text = await res.text();
@@ -78,9 +105,11 @@ export default function SearchPage() {
       if (json?.debug) {
         console.log('search-debug', json.debug);
       }
-      const term = q.trim();
-      if (term) {
-        const next = [term, ...recent.filter((t) => t !== term)].slice(0, 10);
+      
+      // 최근 검색어 저장 (제목 또는 내용 중 있는 것)
+      const searchTerm = titleQuery.trim() || contentQuery.trim();
+      if (searchTerm) {
+        const next = [searchTerm, ...recent.filter((t) => t !== searchTerm)].slice(0, 10);
         setRecent(next);
         try { localStorage.setItem('recentSearches', JSON.stringify(next)); } catch {}
       }
@@ -98,7 +127,7 @@ export default function SearchPage() {
   };
 
   useEffect(() => {
-    if (q.trim().length > 0) onSearch();
+    if (titleQuery.trim().length > 0 || contentQuery.trim().length > 0) onSearch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, filters]);
 
@@ -127,48 +156,60 @@ export default function SearchPage() {
           </h1>
         </div>
         
-        {/* 검색창 - 맨 위 */}
+        {/* 검색창 - 맨 위 (2단 구조) */}
         <div className="bg-white dark:bg-zinc-950 rounded-2xl shadow-lg border border-zinc-200 dark:border-zinc-800 p-6">
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
+          <div className="space-y-4">
+            {/* 첫 번째 검색창: 문서 제목 */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 px-1">
+                📋 문서 제목
+                <span className="ml-2 text-xs font-normal text-zinc-500 dark:text-zinc-400">
+                  (제목에 포함된 키워드로 빠르게 검색)
+                </span>
+              </label>
               <input 
-                value={q} 
-                onChange={(e) => setQ(e.target.value)} 
+                value={titleQuery} 
+                onChange={(e) => setTitleQuery(e.target.value)} 
                 onKeyDown={(e) => { if (e.key === 'Enter') { setPage(1); onSearch(); } }} 
-                placeholder="찾는 기획서에 관련된 정보를 입력해주세요" 
-                className="flex-1 border-2 border-zinc-200 dark:border-zinc-700 rounded-xl px-5 h-14 text-lg focus:border-green-500 focus:outline-none transition-colors" 
+                placeholder="예: Q 멀티, UI 기획서, 로그인" 
+                className="w-full border-2 border-zinc-200 dark:border-zinc-700 rounded-xl px-5 h-12 text-base focus:border-blue-500 focus:outline-none transition-colors" 
               />
-            <button 
-              className={`h-14 px-8 rounded-xl font-semibold transition-colors shadow-md ${
-                loading 
-                  ? 'bg-red-500 hover:bg-red-600 text-white' 
-                  : 'bg-green-500 hover:bg-green-600 text-white'
-              }`}
-              onClick={() => { 
-                if (loading) {
-                  if (abortRef.current) abortRef.current.abort();
-                } else {
-                  setPage(1); 
-                  onSearch(); 
-                }
-              }}
-            >
-              {loading ? '취소' : '검색'}
-            </button>
             </div>
             
-            {/* 내용 찾기 체크박스 */}
-            <div className="flex items-center gap-2 px-2">
-              <input 
-                type="checkbox" 
-                id="searchContent" 
-                checked={searchContent} 
-                onChange={(e) => setSearchContent(e.target.checked)}
-                className="w-4 h-4 text-green-500 border-zinc-300 rounded focus:ring-green-500" 
-              />
-              <label htmlFor="searchContent" className="text-sm font-medium text-zinc-700 dark:text-zinc-300 cursor-pointer select-none">
-                📄 내용 찾기 (문서 안의 내용을 찾으려면 체크하고 검색하세요)
+            {/* 두 번째 검색창: 내용 찾기 */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 px-1">
+                🔍 내용 찾기
+                <span className="ml-2 text-xs font-normal text-zinc-500 dark:text-zinc-400">
+                  (AI가 문서 내용을 분석하여 유사한 상위 10개 검색)
+                </span>
               </label>
+              <div className="flex items-center gap-3">
+                <input 
+                  value={contentQuery} 
+                  onChange={(e) => setContentQuery(e.target.value)} 
+                  onKeyDown={(e) => { if (e.key === 'Enter') { setPage(1); onSearch(); } }} 
+                  placeholder="예: 비밀번호 찾기 기능이 설명된 문서" 
+                  className="flex-1 border-2 border-zinc-200 dark:border-zinc-700 rounded-xl px-5 h-12 text-base focus:border-green-500 focus:outline-none transition-colors" 
+                />
+                <button 
+                  className={`h-12 px-8 rounded-xl font-semibold transition-colors shadow-md ${
+                    loading 
+                      ? 'bg-red-500 hover:bg-red-600 text-white' 
+                      : 'bg-green-500 hover:bg-green-600 text-white'
+                  }`}
+                  onClick={() => { 
+                    if (loading) {
+                      if (abortRef.current) abortRef.current.abort();
+                    } else {
+                      setPage(1); 
+                      onSearch(); 
+                    }
+                  }}
+                >
+                  {loading ? '취소' : '검색'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -220,9 +261,9 @@ export default function SearchPage() {
         {/* 공지사항 - 1줄 */}
         <div className="bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-950/20 dark:to-green-950/20 rounded-xl border border-blue-200 dark:border-blue-800 px-6 py-3">
           <div className="flex items-center gap-3">
-            <span className="text-xl">📢</span>
+            <span className="text-xl">💡</span>
             <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              문서의 제목 혹은 특정 내용을 입력해보세요. 개선 문의는 와니에게 슬랙 주세요.
+              <strong>제목만 입력:</strong> 빠른 검색 | <strong>내용 찾기만 입력:</strong> AI가 전체 문서 분석 | <strong>둘 다 입력:</strong> 제목으로 필터링 후 AI가 상위 10개 선택
             </span>
           </div>
         </div>
@@ -251,7 +292,7 @@ export default function SearchPage() {
                         <>
                           <button 
                             className="flex-1 text-left text-sm hover:text-green-600 dark:hover:text-green-400 transition-colors truncate" 
-                            onClick={() => { setQ(term); setPage(1); }}
+                            onClick={() => { setTitleQuery(term); setPage(1); }}
                           >
                             {idx + 1}. {term}
                           </button>
@@ -277,34 +318,40 @@ export default function SearchPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-[400px]">
               <div className="lg:col-span-2">
-                {loading && <LoadingIndicator label="문서를 찾고 있습니다. 제목만 찾는 경우 내용 찾기 체크박스를 해제하면 훨씬 빨라요." />}
+                {loading && <LoadingIndicator label={
+                  lastSearchMode === 'title' 
+                    ? "문서 제목을 검색하고 있습니다..." 
+                    : "AI가 문서 내용을 분석하고 있습니다... (약 10초 소요)"
+                } />}
                 {error && <div className="text-red-500 bg-red-50 dark:bg-red-950/20 p-4 rounded-xl border border-red-200 dark:border-red-800">{error}</div>}
-                {!loading && !q && (!data || data.items.length === 0) && (
+                {!loading && !titleQuery && !contentQuery && (!data || data.items.length === 0) && (
                   <div className="flex flex-col items-center justify-center py-32 text-center">
                     <span className="text-6xl mb-4">🔍</span>
-                    <div className="text-zinc-400 dark:text-zinc-600 text-xl">찾을 문서를 입력해주세요</div>
+                    <div className="text-zinc-400 dark:text-zinc-600 text-xl">문서 제목 또는 내용 찾기를 입력해주세요</div>
                   </div>
                 )}
-                {!loading && q && data && (
+                {!loading && (titleQuery || contentQuery) && data && (
                   <>
-                    {/* RAG 검색 의도 표시 */}
-                    {(data as any)?.debug?.ragIntent && (
+                    {/* 검색 모드 안내 */}
+                    {(data as any)?.debug?.searchMode && (
                       <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 rounded-xl border-2 border-blue-200 dark:border-blue-800">
                         <div className="flex items-start gap-3">
-                          <span className="text-2xl">🧠</span>
+                          <span className="text-2xl">
+                            {(data as any).debug.searchMode === 'title' && '⚡'}
+                            {(data as any).debug.searchMode === 'content' && '🧠'}
+                            {(data as any).debug.searchMode === 'both' && '🎯'}
+                          </span>
                           <div>
-                            <div className="font-semibold text-blue-900 dark:text-blue-100 mb-1">AI 검색 의도 분석</div>
-                            <div className="text-sm text-blue-700 dark:text-blue-300">{(data as any).debug.ragIntent}</div>
-                            {(data as any)?.debug?.structuredQuery?.titleMust && (
-                              <div className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-                                🎯 제목 필터: {(data as any).debug.structuredQuery.titleMust.join(', ')}
-                              </div>
-                            )}
-                            {(data as any)?.debug?.structuredQuery?.contentMust && (
-                              <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                                📝 내용 필터: {(data as any).debug.structuredQuery.contentMust.join(', ')}
-                              </div>
-                            )}
+                            <div className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                              {(data as any).debug.searchMode === 'title' && '빠른 제목 검색'}
+                              {(data as any).debug.searchMode === 'content' && 'AI 내용 분석 검색'}
+                              {(data as any).debug.searchMode === 'both' && '제목 필터 + AI 내용 분석'}
+                            </div>
+                            <div className="text-sm text-blue-700 dark:text-blue-300">
+                              {(data as any).debug.searchMode === 'title' && '문서 제목에서 키워드를 빠르게 찾았습니다'}
+                              {(data as any).debug.searchMode === 'content' && 'AI가 전체 문서 내용을 분석하여 상위 10개를 선택했습니다'}
+                              {(data as any).debug.searchMode === 'both' && '제목으로 필터링한 후 AI가 내용을 분석하여 상위 10개를 선택했습니다'}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -313,13 +360,14 @@ export default function SearchPage() {
                     <ResultsList items={data.items} activeId={selectedId || undefined} onSelect={async (id: string) => {
                       setSelectedId(id);
                       setSelected({ loading: true });
-                      const r = await fetch(`/api/docs/${id}?q=${encodeURIComponent(q)}`, { credentials: 'include' });
+                      const queryParam = titleQuery || contentQuery;
+                      const r = await fetch(`/api/docs/${id}?q=${encodeURIComponent(queryParam)}`, { credentials: 'include' });
                       const payload = await r.json();
                       setSelected(payload);
-                    }} searchContent={lastSearchUsedContent} query={q} keywords={(data as any)?.debug?.extractedKeywords} />
+                    }} searchContent={lastSearchMode !== 'title'} query={titleQuery || contentQuery} keywords={(data as any)?.debug?.extractedKeywords} />
                   </>
                 )}
-                {!loading && data && !lastSearchUsedContent && (
+                {!loading && data && lastSearchMode === 'title' && (
                   <div className="flex items-center gap-3 mt-6 justify-center">
                     <button 
                       disabled={page <= 1} 
@@ -340,9 +388,9 @@ export default function SearchPage() {
                     </button>
                   </div>
                 )}
-                {!loading && data && lastSearchUsedContent && (
+                {!loading && data && lastSearchMode !== 'title' && (
                   <div className="text-center mt-6 text-sm text-zinc-500">
-                    💡 내용 찾기 사용 시 상위 10개만 표시됩니다
+                    💡 AI 내용 분석 사용 시 상위 10개만 표시됩니다
                   </div>
                 )}
               </div>

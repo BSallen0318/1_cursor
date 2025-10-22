@@ -18,7 +18,9 @@ export async function POST(req: Request) {
   const driveTokenCookie = cookieStore.get('drive_tokens')?.value;
   const body = await req.json().catch(() => ({} as any));
   const {
-    q = '',
+    titleQuery = '',
+    contentQuery = '',
+    q = '', // 하위 호환성 유지
     filters = {},
     page = 1,
     size = 10,
@@ -27,6 +29,8 @@ export async function POST(req: Request) {
     rerank = false,
     useIndex = true  // DB 인덱스 사용 여부
   }: {
+    titleQuery?: string;
+    contentQuery?: string;
     q?: string;
     filters?: { platform?: Platform[]; kind?: DocKind[]; ownerId?: string; tags?: string[]; period?: '7d'|'30d'|'any'; source?: 'all'|'drive'|'github'|'figma'|'jira' };
     page?: number;
@@ -36,14 +40,30 @@ export async function POST(req: Request) {
     rerank?: boolean;
     useIndex?: boolean;
   } = body || {};
+  
+  // 🎯 검색 모드 결정
+  const hasTitleQuery = titleQuery.trim().length > 0;
+  const hasContentQuery = contentQuery.trim().length > 0;
+  const searchMode: 'title' | 'content' | 'both' = hasTitleQuery && hasContentQuery ? 'both' : hasContentQuery ? 'content' : 'title';
+  
+  // 하위 호환성: q가 있으면 titleQuery로 사용
+  const finalTitleQuery = titleQuery || q;
+  const finalContentQuery = contentQuery;
 
   const src = (filters as any).source;
   const wantDrive = !src || src === 'all' || src === 'drive';
   const wantFigma = !src || src === 'all' || src === 'figma';
-  let debug: any = {};
+  let debug: any = {
+    searchMode, // 검색 모드 추가
+    titleQuery: finalTitleQuery,
+    contentQuery: finalContentQuery
+  };
 
   // 🚀 DB 인덱스 검색 (우선 시도)
-  if (useIndex && q.trim().length > 0) {
+  // 제목 또는 내용 찾기 중 하나라도 있으면 검색
+  const hasQuery = finalTitleQuery.trim().length > 0 || finalContentQuery.trim().length > 0;
+  
+  if (useIndex && hasQuery) {
     try {
       const totalCount = await getDocumentCount();
       
@@ -56,12 +76,29 @@ export async function POST(req: Request) {
           platform = src;
         }
 
-        // 1단계: 키워드 검색 (모든 문서 대상, 제한 없음)
-        const dbResults = await searchDocumentsSimple(q, {
-          platform,
-          limit: 10000, // 충분히 큰 수
-          offset: 0
-        });
+        // 🎯 검색 모드에 따른 DB 검색
+        // - title: finalTitleQuery로 빠른 검색
+        // - content: 전체 문서 (content가 있는 것만, AI가 필터링)
+        // - both: finalTitleQuery로 필터링
+        let dbResults: DocRecord[] = [];
+        
+        if (searchMode === 'title' || searchMode === 'both') {
+          // 제목 기반 검색
+          dbResults = await searchDocumentsSimple(finalTitleQuery, {
+            platform,
+            limit: 10000, // 충분히 큰 수
+            offset: 0
+          });
+        } else if (searchMode === 'content') {
+          // 내용 찾기만: 최대한 많은 문서를 수집 (AI가 나중에 필터링)
+          // 빈 문자열 검색은 모든 문서를 반환할 수 있으므로, 대신 1-2글자 단어로 검색
+          const contentKeyword = finalContentQuery.split(/[\s,.\-_]+/).find(w => w.length >= 2) || ' ';
+          dbResults = await searchDocumentsSimple(contentKeyword, {
+            platform,
+            limit: 10000,
+            offset: 0
+          });
+        }
 
         debug.dbSearch = true;
         debug.dbCount = dbResults.length;
@@ -72,9 +109,10 @@ export async function POST(req: Request) {
         const items: DocItem[] = dbResults.map((doc: DocRecord) => {
           // content가 있으면 검색어 주변 텍스트를 snippet으로 사용
           let snippet = doc.snippet || '';
-          if (doc.content && q) {
+          const searchQuery = finalTitleQuery || finalContentQuery; // 검색어 결정
+          if (doc.content && searchQuery) {
             const lowerContent = doc.content.toLowerCase();
-            const lowerQuery = q.toLowerCase();
+            const lowerQuery = searchQuery.toLowerCase();
             const index = lowerContent.indexOf(lowerQuery);
             if (index >= 0) {
               // 검색어 주변 200자를 snippet으로
@@ -154,24 +192,29 @@ export async function POST(req: Request) {
         // 점수 계산
         filtered = filtered.map((d: any) => ({
           ...d,
-          _titleScore: computeTitleScore(d.title, q),
-          _contentScore: computeContentScore(d.snippet, q),
+          _titleScore: computeTitleScore(d.title, finalTitleQuery),
+          _contentScore: computeContentScore(d.snippet, finalTitleQuery),
           _recency: new Date(d.updatedAt).getTime()
         }));
 
-        // 2단계: Gemini 의미 검색 (체크박스 활성화 시)
-        // fast=true (체크박스 안 함) → 메타데이터만 검색
-        // fast=false (체크박스 함) → Gemini 사용
+        // 🎯 2단계: AI 의미 검색
+        // - title: AI 사용 안 함 (빠른 검색)
+        // - content 또는 both: AI 사용
         
-        if (!fast && (hasGemini() || hasOpenAI())) {
-          debug.semanticReason = 'content_search_enabled';
+        const useAI = (searchMode === 'content' || searchMode === 'both') && (hasGemini() || hasOpenAI());
+        
+        if (useAI) {
+          debug.semanticReason = `content_search (mode: ${searchMode})`;
           try {
             const semanticStartTime = Date.now();
-            const [qv] = await embedTexts([q]);
+            
+            // 🎯 AI 분석용 쿼리: contentQuery 우선, 없으면 titleQuery
+            const aiQuery = finalContentQuery || finalTitleQuery;
+            const [qv] = await embedTexts([aiQuery]);
             
             // RAG: 자연어 쿼리를 구조화된 형태로 파싱
-            const words = q.trim().split(/[\s,.\-_]+/).filter(w => w.length >= 2);
-            const isSimpleKeyword = words.length <= 2 && !/[찾아|알려|보여|주세요|해줘|관련|문서|언급|들어간]/.test(q);
+            const words = aiQuery.trim().split(/[\s,.\-_]+/).filter(w => w.length >= 2);
+            const isSimpleKeyword = words.length <= 2 && !/[찾아|알려|보여|주세요|해줘|관련|문서|언급|들어간]/.test(aiQuery);
             
             let structuredQuery: any;
             let keywords: string[];
@@ -179,13 +222,13 @@ export async function POST(req: Request) {
             if (isSimpleKeyword) {
               // 단순 키워드: 원본 그대로 사용
               keywords = words;
-              structuredQuery = { keywords, intent: q };
+              structuredQuery = { keywords, intent: aiQuery };
               console.log('🔍 단순 키워드 검색 (Gemini 건너뜀):', keywords);
               debug.keywordExtractionMethod = 'simple';
             } else {
               // 복잡한 자연어: Gemini RAG로 구조화
               const { parseSearchQuery } = await import('@/lib/ai');
-              structuredQuery = await parseSearchQuery(q);
+              structuredQuery = await parseSearchQuery(aiQuery);
               keywords = structuredQuery.keywords || [];
               console.log('🧠 RAG 구조화된 쿼리:', structuredQuery);
               debug.keywordExtractionMethod = 'rag';
@@ -193,7 +236,7 @@ export async function POST(req: Request) {
             }
             
             // 🚨 원본 쿼리에서도 키워드 추출 (RAG가 놓칠 수 있는 핵심 단어 보존)
-            const rawKeywords = q.toLowerCase()
+            const rawKeywords = aiQuery.toLowerCase()
               .split(/[\s,.\-_]+/)
               .map(w => w.replace(/[을를이가에서와과는도한줘를은]$/g, ''))
               .filter(w => w.length >= 2); // 일단 2글자 이상
@@ -230,7 +273,7 @@ export async function POST(req: Request) {
             
             // 🚨 키워드가 없으면 원본 쿼리에서 3글자 이상 단어 추출
             if (keywords.length === 0) {
-              keywords = q.split(/[\s,.\-_]+/)
+              keywords = aiQuery.split(/[\s,.\-_]+/)
                 .filter(w => w.length >= 3)
                 .slice(0, 3);
               console.log('⚠️ 필터링 후 키워드 없음 → 원본에서 3글자 이상 추출:', keywords);
@@ -628,14 +671,18 @@ export async function POST(req: Request) {
         console.log(`🏆 최종 Hybrid 점수 (BM25 + 임베딩):`, topFinal);
 
         // 페이지네이션
+        // 🎯 제목만 검색은 페이지네이션, 내용 찾기는 상위 10개만
         const total = filtered.length;
-        const start = Math.max(0, (page - 1) * size);
-        const paged = filtered.slice(start, start + size).map((d: any) => {
+        const start = searchMode === 'title' ? Math.max(0, (page - 1) * size) : 0;
+        const pageSize = searchMode === 'title' ? size : 10; // 내용 찾기는 상위 10개만
+        
+        const highlightQuery = finalTitleQuery || finalContentQuery; // 하이라이트용 쿼리
+        const paged = filtered.slice(start, start + pageSize).map((d: any) => {
           const result: any = {
             ...d,
             highlight: {
-              title: matchHighlight(d.title, q),
-              snippet: matchHighlight(d.snippet, q)
+              title: matchHighlight(d.title, highlightQuery),
+              snippet: matchHighlight(d.snippet, highlightQuery)
             }
           };
           // content는 클라이언트에 보내지 않음 (용량 큰 데이터)
