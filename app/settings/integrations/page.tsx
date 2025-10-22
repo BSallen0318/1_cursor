@@ -160,7 +160,7 @@ export default function IntegrationsPage() {
           recursive: true,
           subfolders,
           excludeFolders,
-          skipTimestampUpdate: !!yearRange // 연도 범위 필터 시 타임스탬프 업데이트 안함
+          skipTimestampUpdate: false // yearRange가 있으면 자동으로 타임스탬프 업데이트 안함
         })
       });
       const data = await res.json();

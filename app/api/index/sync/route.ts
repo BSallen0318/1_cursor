@@ -146,7 +146,9 @@ export async function POST(req: Request) {
               console.log('➕ 추가 색인 (타임스탬프 없음, 최신 3000개)...');
             }
           } else if (yearRange) {
-            console.log(`📅 연도별 색인: ${yearRange.start.slice(0,4)}~${yearRange.end.slice(0,4)} 전체 문서 수집...`);
+            // 연도 범위 필터: Google Drive API 쿼리에 시작 날짜를 직접 추가
+            modifiedTimeAfter = yearRange.start;
+            console.log(`📅 연도별 색인: ${yearRange.start.slice(0,4)}~${yearRange.end.slice(0,4)} (${yearRange.start} 이후 문서)...`);
           } else {
             console.log('🔄 강제 전체 재색인: 모든 문서 다시 수집...');
           }
@@ -164,20 +166,22 @@ export async function POST(req: Request) {
           for (const it of (crawl.files || [])) if (it?.id) mergedMap.set(it.id, it);
           let allFiles = Array.from(mergedMap.values());
           
-          // 연도 범위 필터 적용
+          console.log(`📦 수집된 총 문서: ${allFiles.length}개`);
+          
+          // 연도 범위 필터 적용 (종료 날짜 필터)
           if (yearRange) {
-            const startDate = new Date(yearRange.start);
             const endDate = new Date(yearRange.end);
+            const beforeFilter = allFiles.length;
             allFiles = allFiles.filter((f: any) => {
               if (!f.modifiedTime) return false;
               const modDate = new Date(f.modifiedTime);
-              return modDate >= startDate && modDate <= endDate;
+              return modDate <= endDate;
             });
-            console.log(`📅 연도 필터 (${yearRange.start.slice(0,4)}~${yearRange.end.slice(0,4)}): ${allFiles.length}개`);
+            console.log(`📅 연도 필터 적용: ${beforeFilter}개 → ${allFiles.length}개 (${yearRange.start.slice(0,4)}~${yearRange.end.slice(0,4)})`);
           }
           
           files = allFiles;
-          console.log(`➕ 추가 색인: ${files.length}개 수집`);
+          console.log(`✅ 최종 색인: ${files.length}개 수집`);
         }
 
         // 폴더만 제외
@@ -231,10 +235,12 @@ export async function POST(req: Request) {
         
         const count = await getDocumentCount('drive');
         
-        // 타임스탬프 업데이트 (skipTimestampUpdate가 true면 건너뜀)
-        if (mode === 'normal' && !skipTimestampUpdate) {
+        // 타임스탬프 업데이트 (yearRange 또는 skipTimestampUpdate가 true면 건너뜀)
+        if (mode === 'normal' && !skipTimestampUpdate && !yearRange) {
           await setMetadata('drive_last_sync', new Date().toISOString());
           console.log('📅 추가 색인 타임스탬프 업데이트');
+        } else if (yearRange) {
+          console.log('📅 연도별 색인 완료 (타임스탬프 유지)');
         } else if (skipTimestampUpdate) {
           console.log('📅 타임스탬프 유지 (skipTimestampUpdate=true)');
         } else {
