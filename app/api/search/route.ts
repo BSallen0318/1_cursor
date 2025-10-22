@@ -349,6 +349,14 @@ export async function POST(req: Request) {
             const titles = pool.map((d: any) => d.title || 'Untitled');
             const titleEmbeddings = await embedTexts(titles);
             
+            // 벡터 크기 확인 (디버깅)
+            if (titleEmbeddings.length > 0 && titleEmbeddings[0]) {
+              console.log(`  🔍 쿼리 벡터 크기: ${qv?.length || 0}, 제목 벡터 크기: ${titleEmbeddings[0].length}`);
+              // 첫 3개 값만 출력
+              console.log(`  🔍 쿼리 벡터 샘플: [${qv?.slice(0, 3).join(', ')}...]`);
+              console.log(`  🔍 제목 벡터 샘플: [${titleEmbeddings[0].slice(0, 3).join(', ')}...]`);
+            }
+            
             // 2. 내용만 임베딩 (내용이 있는 문서만)
             const contentsForEmbed: string[] = [];
             const contentIndices: number[] = [];  // 어느 문서의 내용인지 추적
@@ -375,35 +383,54 @@ export async function POST(req: Request) {
             // 제목 유사도
             for (let i = 0; i < pool.length; i++) {
               const v = titleEmbeddings[i] || [];
-              titleSims[pool[i].id] = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
+              const sim = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
+              titleSims[pool[i].id] = sim;
+              
+              // 첫 5개만 로그 출력 (디버깅)
+              if (i < 5) {
+                console.log(`    📌 ${i+1}. "${pool[i].title.slice(0, 30)}" - 제목 유사도: ${sim.toFixed(4)}`);
+              }
             }
             
             // 내용 유사도 (있는 것만)
             for (let i = 0; i < contentEmbeddings.length; i++) {
               const docIndex = contentIndices[i];
               const v = contentEmbeddings[i] || [];
-              contentSims[pool[docIndex].id] = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
+              const sim = (qv?.length && v?.length) ? cosineSimilarity(qv, v) : 0;
+              contentSims[pool[docIndex].id] = sim;
             }
             
             // 4. 가중치 적용: 제목 70%, 내용 30%
             const TITLE_WEIGHT = 0.7;
             const CONTENT_WEIGHT = 0.3;
+            const SIMILARITY_THRESHOLD = 0.3;  // 0.3 미만은 관련 없음
+            
+            let filteredByThreshold = 0;
             
             for (const d of pool as any[]) {
               const titleScore = titleSims[d.id] || 0;
               const contentScore = contentSims[d.id] || 0;
               
               // 내용이 있으면 가중 평균, 없으면 제목만
+              let finalScore = 0;
               if (contentScore > 0) {
-                d._embedScore = (titleScore * TITLE_WEIGHT + contentScore * CONTENT_WEIGHT) * 1000;
-                d._titleEmbedScore = titleScore * 1000;
-                d._contentEmbedScore = contentScore * 1000;
+                finalScore = (titleScore * TITLE_WEIGHT + contentScore * CONTENT_WEIGHT);
               } else {
-                d._embedScore = titleScore * 1000;  // 제목만 100%
-                d._titleEmbedScore = titleScore * 1000;
-                d._contentEmbedScore = 0;
+                finalScore = titleScore;
               }
+              
+              // Threshold 적용: 0.3 미만은 0점 처리
+              if (finalScore < SIMILARITY_THRESHOLD) {
+                finalScore = 0;
+                filteredByThreshold++;
+              }
+              
+              d._embedScore = finalScore * 1000;
+              d._titleEmbedScore = titleScore * 1000;
+              d._contentEmbedScore = contentScore * 1000;
             }
+            
+            console.log(`  ⚠️ Threshold (${SIMILARITY_THRESHOLD}) 미만 필터링: ${filteredByThreshold}개`);
             
             // 점수 높은 순으로 정렬
             pool.sort((a: any, b: any) => (b._embedScore || 0) - (a._embedScore || 0));
