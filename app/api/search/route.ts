@@ -246,14 +246,18 @@ export async function POST(req: Request) {
               structuredQuery = { keywords, intent: aiQuery };
               console.log('🔍 단순 키워드 검색 (Gemini 건너뜀):', keywords);
               debug.keywordExtractionMethod = 'simple';
+              debug.ragSkipped = true;
             } else {
               // 복잡한 자연어: Gemini RAG로 구조화
+              console.log(`🧠 RAG 시작: "${aiQuery}"`);
               const { parseSearchQuery } = await import('@/lib/ai');
               structuredQuery = await parseSearchQuery(aiQuery);
               keywords = structuredQuery.keywords || [];
-              console.log('🧠 RAG 구조화된 쿼리:', structuredQuery);
+              console.log('🧠 RAG가 추출한 키워드:', keywords);
+              console.log('🧠 RAG 전체 응답:', JSON.stringify(structuredQuery, null, 2));
               debug.keywordExtractionMethod = 'rag';
               debug.structuredQuery = structuredQuery;
+              debug.ragOriginalKeywords = keywords; // RAG 원본 키워드 저장
             }
             
             // 🚨 원본 쿼리에서도 키워드 추출 (RAG가 놓칠 수 있는 핵심 단어 보존)
@@ -262,10 +266,11 @@ export async function POST(req: Request) {
               .map(w => w.replace(/[을를이가에서와과는도한줘를은]$/g, ''))
               .filter(w => w.length >= 2); // 일단 2글자 이상
             
-            console.log(`🔍 원본 쿼리 키워드 (RAG 보완용):`, rawKeywords);
+            console.log(`🔍 원본 쿼리에서 추출한 키워드:`, rawKeywords);
             
             // RAG 키워드와 원본 키워드 병합
             const mergedKeywords = [...keywords, ...rawKeywords];
+            console.log(`🔗 병합된 키워드 (RAG + 원본):`, mergedKeywords);
             
             // 🚨 키워드 재분리 및 필터링 (공백 제거 + 초고빈도 제거)
             // 🚨 "방"을 stopWords에서 제거 (사용자가 "비밀번호 방" 같은 검색을 할 수 있음)
@@ -457,6 +462,17 @@ export async function POST(req: Request) {
               }
               
               let allDocs = Array.from(docMap.values());
+              
+              // 🚨 both 모드: 확장 검색에서도 제목 필터링 강제 적용!
+              if (searchMode === 'both' && finalTitleQuery.trim()) {
+                const titleKeywords = finalTitleQuery.toLowerCase().split(/[\s,.\-_]+/).filter(w => w.length >= 2);
+                const beforeExpand = allDocs.length;
+                allDocs = allDocs.filter(doc => {
+                  const lowerTitle = doc.title.toLowerCase();
+                  return titleKeywords.some(kw => lowerTitle.includes(kw));
+                });
+                console.log(`🚨 확장 검색 제목 필터링 (both 모드): ${beforeExpand}개 → ${allDocs.length}개`);
+              }
               console.log(`📊 메타데이터 검색 결과: ${allDocs.length}개`);
               
               // 2단계: 키워드 관련도 점수 계산 (제목 완전 일치 우선)
@@ -687,44 +703,53 @@ export async function POST(req: Request) {
           }
         }
 
-        // 🎯 파일 타입별 우선순위 함수
-        const getFileTypePriority = (item: any): number => {
+        // 🎯 파일 타입별 우선순위 점수 (점수에 직접 반영)
+        const getFileTypePriorityScore = (item: any): number => {
           const mimeType = item.mime_type || '';
           const kind = item.kind || '';
+          const title = item.title || '';
           
-          // 우선순위 1: 문서 타입 (구글독스, 슬라이드, 시트, 피그마, 지라)
+          // 🚨 최우선: 구글독스, 슬라이드, 시트 (1,000,000점 보너스)
           if (
             mimeType.includes('document') ||
             mimeType.includes('presentation') ||
-            mimeType.includes('spreadsheet') ||
+            mimeType.includes('spreadsheet')
+          ) {
+            console.log(`  📋 구글 문서 우선순위: "${title.slice(0, 30)}"`);
+            return 1000000;
+          }
+          
+          // 피그마, 지라 (1,000,000점 보너스)
+          if (
             kind === 'figma' ||
             kind === 'jira' ||
             item.platform === 'figma' ||
             item.platform === 'jira'
           ) {
-            return 1;
+            return 1000000;
           }
           
-          // 우선순위 2: 기타 파일 (jpg, pdf, 등)
-          return 2;
+          // 기타 파일 (jpg, pdf, png 등): 0점
+          console.log(`  📎 기타 파일 (우선순위 낮음): "${title.slice(0, 30)}" (${mimeType})`);
+          return 0;
         };
         
-        // 정렬: 파일 타입 우선순위 → Hybrid 점수 → 최종 수정 시간
+        // 파일 타입 우선순위 점수를 Hybrid 점수에 추가
+        filtered = filtered.map((d: any) => ({
+          ...d,
+          _fileTypePriorityScore: getFileTypePriorityScore(d),
+          _totalScore: (d._relevance || 0) + (d._embedScore || 0) + getFileTypePriorityScore(d)
+        }));
+        
+        // 정렬: 총점 (파일 타입 우선순위 포함) → 최종 수정 시간
         filtered.sort((a: any, b: any) => {
-          // 1단계: 파일 타입 우선순위
-          const priorityA = getFileTypePriority(a);
-          const priorityB = getFileTypePriority(b);
-          if (priorityA !== priorityB) return priorityA - priorityB;
+          // 1단계: 총점 (파일 타입 우선순위 + Hybrid 점수)
+          const totalA = a._totalScore || 0;
+          const totalB = b._totalScore || 0;
           
-          // 2단계: Hybrid 점수 = BM25 점수 + 임베딩 점수
-          // BM25: 5000점 (제목), 1000점 (스니펫/내용), +50000점 (AND 보너스)
-          // 임베딩: 0~100점 (0.0~1.0 * 100, 키워드 없으면 0)
-          const hybridA = (a._relevance || 0) + (a._embedScore || 0);
-          const hybridB = (b._relevance || 0) + (b._embedScore || 0);
+          if (totalB !== totalA) return totalB - totalA;
           
-          if (hybridB !== hybridA) return hybridB - hybridA;
-          
-          // 3단계: 동점일 경우 최신순
+          // 2단계: 동점일 경우 최신순
           return b._recency - a._recency;
         });
         
@@ -742,14 +767,15 @@ export async function POST(req: Request) {
         filtered.slice(0, 10).forEach((d: any, idx: number) => {
           const bm25 = d._relevance || 0;
           const embedScore = d._embedScore || 0;
-          const hybrid = bm25 + embedScore;
-          const priority = getFileTypePriority(d);
+          const fileTypePriority = d._fileTypePriorityScore || 0;
+          const totalScore = d._totalScore || 0;
           
           console.log(`\n📄 ${idx + 1}. "${d.title}"`);
-          console.log(`   파일 타입: ${d.mime_type || d.kind || 'unknown'} (우선순위: ${priority})`);
+          console.log(`   파일 타입: ${d.mime_type || d.kind || 'unknown'}`);
           console.log(`   플랫폼: ${d.platform}`);
           console.log(`   최종 수정: ${d.updatedAt}`);
           console.log(`   ───────────────────────────────────`);
+          console.log(`   🏅 파일 타입 우선순위 점수: ${fileTypePriority.toLocaleString()}점`);
           console.log(`   📊 BM25 점수: ${bm25.toLocaleString()}점`);
           if (d._keywordMatchCount !== undefined) {
             const totalKeywords = debug.extractedKeywords ? debug.extractedKeywords.length : '?';
@@ -768,7 +794,9 @@ export async function POST(req: Request) {
           if (!d._hasKeyword) {
             console.log(`      └─ ⚠️ 키워드 미포함 (임베딩 점수 0 처리)`);
           }
-          console.log(`   🎯 최종 Hybrid 점수: ${hybrid.toLocaleString()}점`);
+          console.log(`   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+          console.log(`   🎯 최종 총점: ${totalScore.toLocaleString()}점`);
+          console.log(`      (파일타입 ${fileTypePriority.toLocaleString()} + BM25 ${bm25.toLocaleString()} + 임베딩 ${Math.round(embedScore)})`);
         });
         
         console.log(`\n========================================\n`);
