@@ -707,30 +707,37 @@ export async function POST(req: Request) {
         const getFileTypePriorityScore = (item: any): number => {
           const mimeType = item.mime_type || '';
           const kind = item.kind || '';
+          const platform = item.platform || '';
           const title = item.title || '';
           
-          // 🚨 최우선: 구글독스, 슬라이드, 시트 (1,000,000점 보너스)
+          // 우선순위 1: 구글 슬라이드, 피그마 (4,000,000점)
           if (
-            mimeType.includes('document') ||
-            mimeType.includes('presentation') ||
-            mimeType.includes('spreadsheet')
-          ) {
-            console.log(`  📋 구글 문서 우선순위: "${title.slice(0, 30)}"`);
-            return 1000000;
-          }
-          
-          // 피그마, 지라 (1,000,000점 보너스)
-          if (
+            mimeType === 'application/vnd.google-apps.presentation' ||
             kind === 'figma' ||
-            kind === 'jira' ||
-            item.platform === 'figma' ||
-            item.platform === 'jira'
+            platform === 'figma'
           ) {
-            return 1000000;
+            console.log(`  🎨 최우선 (슬라이드/피그마): "${title.slice(0, 30)}"`);
+            return 4000000;
           }
           
-          // 기타 파일 (jpg, pdf, png 등): 0점
-          console.log(`  📎 기타 파일 (우선순위 낮음): "${title.slice(0, 30)}" (${mimeType})`);
+          // 우선순위 2: 구글 독스, 지라 (3,000,000점)
+          if (
+            mimeType === 'application/vnd.google-apps.document' ||
+            kind === 'jira' ||
+            platform === 'jira'
+          ) {
+            console.log(`  📝 우선순위 2 (독스/지라): "${title.slice(0, 30)}"`);
+            return 3000000;
+          }
+          
+          // 우선순위 3: 구글 시트 (2,000,000점)
+          if (mimeType === 'application/vnd.google-apps.spreadsheet') {
+            console.log(`  📊 우선순위 3 (시트): "${title.slice(0, 30)}"`);
+            return 2000000;
+          }
+          
+          // 우선순위 4: 기타 파일 (jpg, pdf, png 등): 0점
+          console.log(`  📎 기타 파일 (최하위): "${title.slice(0, 30)}" (${mimeType})`);
           return 0;
         };
         
@@ -762,6 +769,11 @@ export async function POST(req: Request) {
         if (debug.extractedKeywords) {
           console.log(`추출된 키워드: [${debug.extractedKeywords.join(', ')}]`);
         }
+        console.log(`\n📊 파일 타입별 우선순위 점수:`);
+        console.log(`   1위: 슬라이드/피그마 → +4,000,000점`);
+        console.log(`   2위: 독스/지라 → +3,000,000점`);
+        console.log(`   3위: 시트 → +2,000,000점`);
+        console.log(`   4위: 기타 파일 → +0점`);
         console.log(`========================================\n`);
         
         filtered.slice(0, 10).forEach((d: any, idx: number) => {
@@ -770,8 +782,16 @@ export async function POST(req: Request) {
           const fileTypePriority = d._fileTypePriorityScore || 0;
           const totalScore = d._totalScore || 0;
           
+          // 파일 타입명 결정
+          let fileTypeName = '';
+          if (fileTypePriority === 4000000) fileTypeName = '🎨 슬라이드/피그마';
+          else if (fileTypePriority === 3000000) fileTypeName = '📝 독스/지라';
+          else if (fileTypePriority === 2000000) fileTypeName = '📊 시트';
+          else fileTypeName = '📎 기타파일';
+          
           console.log(`\n📄 ${idx + 1}. "${d.title}"`);
-          console.log(`   파일 타입: ${d.mime_type || d.kind || 'unknown'}`);
+          console.log(`   파일 유형: ${fileTypeName}`);
+          console.log(`   mime_type: ${d.mime_type || d.kind || 'unknown'}`);
           console.log(`   플랫폼: ${d.platform}`);
           console.log(`   최종 수정: ${d.updatedAt}`);
           console.log(`   ───────────────────────────────────`);
@@ -796,7 +816,7 @@ export async function POST(req: Request) {
           }
           console.log(`   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
           console.log(`   🎯 최종 총점: ${totalScore.toLocaleString()}점`);
-          console.log(`      (파일타입 ${fileTypePriority.toLocaleString()} + BM25 ${bm25.toLocaleString()} + 임베딩 ${Math.round(embedScore)})`);
+          console.log(`      계산: 파일타입 ${fileTypePriority.toLocaleString()} + BM25 ${bm25.toLocaleString()} + 임베딩 ${Math.round(embedScore)}`);
         });
         
         console.log(`\n========================================\n`);
