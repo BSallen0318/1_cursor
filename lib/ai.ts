@@ -361,7 +361,7 @@ function fallbackKeywordExtraction(query: string): string[] {
 // 🎯 Gemini Grounding: 검색된 문서를 기반으로 정확한 답변 생성
 export async function generateGroundedAnswer(
   query: string,
-  documents: Array<{ id: string; title: string; content: string; url?: string }>
+  documents: Array<{ id: string; title: string; content: string; url?: string; updatedAt?: string }>
 ): Promise<{ answer: string; citations: Array<{ docId: string; title: string; url?: string }> }> {
   const provider = resolveProvider();
   const DEBUG = process.env.AI_DEBUG === '1' || process.env.AI_DEBUG === 'true';
@@ -369,11 +369,26 @@ export async function generateGroundedAnswer(
   if (DEBUG) console.log(`[Grounding] 질문: "${query}"`);
   if (DEBUG) console.log(`[Grounding] 문서 개수: ${documents.length}개`);
   
-  // 문서 컨텍스트 생성 (각 문서에 번호 부여)
-  const contextParts = documents.map((doc, idx) => {
+  // 🎯 최신 문서 우선 정렬 (중복/충돌 시 최신 우선)
+  const sortedDocs = [...documents].sort((a, b) => {
+    const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+    const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+    return timeB - timeA; // 최신 순
+  });
+  
+  if (DEBUG) {
+    console.log(`[Grounding] 문서 정렬 (최신 우선):`);
+    sortedDocs.slice(0, 3).forEach((doc, idx) => {
+      console.log(`  ${idx + 1}. "${doc.title.slice(0, 30)}" (${doc.updatedAt?.slice(0, 10)})`);
+    });
+  }
+  
+  // 문서 컨텍스트 생성 (각 문서에 번호 부여, 최신순)
+  const contextParts = sortedDocs.map((doc, idx) => {
     const docNumber = idx + 1;
     const content = doc.content.slice(0, 10000); // 문서당 최대 10,000자
-    return `[문서 ${docNumber}] 제목: ${doc.title}\n내용:\n${content}\n`;
+    const updatedDate = doc.updatedAt ? `\n수정일: ${doc.updatedAt.slice(0, 10)}` : '';
+    return `[문서 ${docNumber}] 제목: ${doc.title}${updatedDate}\n내용:\n${content}\n`;
   }).join('\n---\n\n');
   
   const prompt = [
@@ -384,14 +399,17 @@ export async function generateGroundedAnswer(
     '2. 문서에 없는 내용은 절대 추측하지 마세요.',
     '3. 답변 시 반드시 출처를 [문서 N] 형식으로 명시하세요.',
     '4. 여러 문서의 정보를 종합하여 완전한 답변을 작성하세요.',
-    '5. 답변 형식: 3~8개의 불릿 포인트 (-로 시작)',
+    '5. ⚠️ 중복되거나 충돌하는 내용이 있으면 최신 문서(수정일이 최근)의 내용을 우선하세요.',
+    '6. 각 정보마다 어느 문서에서 가져왔는지 명시하세요.',
+    '7. 답변 형식: 3~10개의 불릿 포인트 (-로 시작)',
     '',
-    '제공된 문서:',
+    '📚 제공된 문서 (최신순 정렬):',
     contextParts,
     '',
-    `질문: ${query}`,
+    `❓ 질문: ${query}`,
     '',
-    '답변 (불릿 포인트 형식, 각 항목마다 [문서 N] 출처 표시):'
+    '💡 답변 (불릿 포인트 형식, 각 항목마다 [문서 N] 출처 표시):',
+    '- (답변 내용) [문서 N]'
   ].join('\n');
   
   if (DEBUG) {
@@ -438,7 +456,7 @@ export async function generateGroundedAnswer(
       }).filter(n => n > 0))];
       
       const citations = citedDocNumbers.map(num => {
-        const doc = documents[num - 1]; // 0-based index
+        const doc = sortedDocs[num - 1]; // 0-based index, 최신순 정렬된 문서 사용
         return doc ? {
           docId: doc.id,
           title: doc.title,
@@ -446,7 +464,12 @@ export async function generateGroundedAnswer(
         } : null;
       }).filter(Boolean) as Array<{ docId: string; title: string; url?: string }>;
       
-      if (DEBUG) console.log(`[Grounding] 출처: ${citations.length}개 문서 인용`);
+      if (DEBUG) {
+        console.log(`[Grounding] 출처: ${citations.length}개 문서 인용`);
+        citations.forEach((c, idx) => {
+          console.log(`  ${idx + 1}. "${c.title.slice(0, 30)}"`);
+        });
+      }
       
       return {
         answer: answer.trim(),
@@ -492,7 +515,7 @@ export async function generateGroundedAnswer(
       }).filter(n => n > 0))];
       
       const citations = citedDocNumbers.map(num => {
-        const doc = documents[num - 1];
+        const doc = sortedDocs[num - 1]; // 최신순 정렬된 문서 사용
         return doc ? {
           docId: doc.id,
           title: doc.title,

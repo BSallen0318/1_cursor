@@ -475,14 +475,15 @@ export default function SearchPage() {
                           <span className="text-3xl">🤖</span>
                           <div className="flex-1">
                             <div className="font-bold text-lg text-purple-900 dark:text-purple-100 mb-2">
-                              AI 답변 (상위 {data.groundedAnswer.documentCount}개 문서 기반)
+                              🤖 AI 답변
                             </div>
                             <div className="text-sm text-purple-700 dark:text-purple-300 mb-1">
-                              질문: {data.groundedAnswer.question}
+                              <strong>질문:</strong> {data.groundedAnswer.question}
                             </div>
                             <div className="text-xs text-purple-600 dark:text-purple-400">
-                              생성 시간: {Math.round(data.groundedAnswer.generationTime / 1000)}초 | 
-                              인용: {data.groundedAnswer.citations.length}개 문서
+                              📚 분석 대상: 상위 {data.groundedAnswer.documentCount}개 문서 (최신순) | 
+                              ⏱️ 생성 시간: {Math.round(data.groundedAnswer.generationTime / 1000)}초 | 
+                              📎 인용: {data.groundedAnswer.citations.length}개 문서
                             </div>
                           </div>
                         </div>

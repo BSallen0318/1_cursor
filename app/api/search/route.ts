@@ -858,15 +858,16 @@ export async function POST(req: Request) {
             console.log(`🧠 Gemini Grounding 시작...`);
             const groundingStartTime = Date.now();
             
-            // 상위 5개 문서의 내용 수집 (content가 있는 것만)
+            // 상위 10개 문서의 내용 수집 (content가 있는 것만)
             const topDocsForGrounding = filtered
               .filter((d: any) => d.content && d.content.trim().length > 100)
-              .slice(0, 5)
+              .slice(0, 10)
               .map((d: any) => ({
                 id: d.id,
                 title: d.title,
                 content: d.content,
-                url: d.url
+                url: d.url,
+                updatedAt: d.updatedAt  // 최신순 정렬용
               }));
             
             console.log(`   📚 Grounding 대상 문서: ${topDocsForGrounding.length}개`);
