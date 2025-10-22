@@ -242,12 +242,18 @@ export async function driveSearchSharedDrivesEx(
     query += ` and modifiedTime <= '${modifiedTimeBefore}'`;
   }
 
+  console.log(`🔍 공유 드라이브 검색 쿼리: ${query}`);
+
   const all: any[] = [];
   const drivesRes = await drive.drives.list({ pageSize: 100 }).catch(() => ({ data: { drives: [] } }));
-  const drives: Array<{ id: string }> = (drivesRes.data?.drives || []) as any;
+  const drives: Array<{ id: string; name?: string }> = (drivesRes.data?.drives || []) as any;
+  
+  console.log(`📊 공유 드라이브 ${drives.length}개 발견`);
 
   for (const d of drives) {
+    console.log(`  ↪ 드라이브 "${d.name || d.id}" 검색 중...`);
     let token: string | undefined = undefined;
+    let driveFileCount = 0;
     while (all.length < limit) {
       const r = await drive.files
         .list({
@@ -262,10 +268,13 @@ export async function driveSearchSharedDrivesEx(
           fields: 'files(id,driveId,name,mimeType,modifiedTime,owners(displayName,emailAddress,me,permissionId),webViewLink,iconLink),nextPageToken'
         })
         .catch(() => ({ data: { files: [], nextPageToken: undefined } } as any));
-      all.push(...(r.data?.files || []));
+      const files = r.data?.files || [];
+      all.push(...files);
+      driveFileCount += files.length;
       token = r.data?.nextPageToken as string | undefined;
       if (!token) break;
     }
+    console.log(`  ✓ ${driveFileCount}개 파일 수집`);
     if (all.length >= limit) break;
   }
 
