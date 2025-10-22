@@ -192,34 +192,41 @@ export async function POST(req: Request) {
               debug.structuredQuery = structuredQuery;
             }
             
-            // 🚨 키워드 재분리 및 필터링 (공백 제거 + 3글자 미만 제거)
-            const highFreqStopWords = ['문서', '관련', '찾아', '알려', '보여', '주세요', '해줘', '언급', '들어간', '있는', '있어', '있나', '뭐', '어디', '어떻게', '파일', '내용'];
+            // 🚨 원본 쿼리에서도 키워드 추출 (RAG가 놓칠 수 있는 핵심 단어 보존)
+            const rawKeywords = q.toLowerCase()
+              .split(/[\s,.\-_]+/)
+              .map(w => w.replace(/[을를이가에서와과는도한줘를은]$/g, ''))
+              .filter(w => w.length >= 2); // 일단 2글자 이상
+            
+            console.log(`🔍 원본 쿼리 키워드 (RAG 보완용):`, rawKeywords);
+            
+            // RAG 키워드와 원본 키워드 병합
+            const mergedKeywords = [...keywords, ...rawKeywords];
+            
+            // 🚨 키워드 재분리 및 필터링 (공백 제거 + 초고빈도 제거)
+            const highFreqStopWords = ['q', 'Q', '문서', '관련', '찾아', '알려', '보여', '주세요', '해줘', '언급', '들어간', '있는', '있어', '있나', '뭐', '어디', '어떻게', '파일', '내용', '방'];
             
             // 1. 모든 키워드를 공백/특수문자로 재분리
             const resplitKeywords: string[] = [];
-            for (const kw of keywords) {
+            for (const kw of mergedKeywords) {
               const parts = kw.split(/[\s,.\-_]+/).filter(p => p.length > 0);
               resplitKeywords.push(...parts);
             }
             
-            console.log(`🔍 키워드 재분리 (공백 제거): ${keywords.length}개 → ${resplitKeywords.length}개`, resplitKeywords);
+            console.log(`🔍 키워드 재분리 (공백 제거): ${mergedKeywords.length}개 → ${resplitKeywords.length}개`, resplitKeywords);
             
-            // 2. 3글자 미만 제거 + stopWords 제거
+            // 2. 초고빈도 stopWords 제거 (길이 무관)
             const beforeFilter = resplitKeywords.length;
             keywords = resplitKeywords.filter(kw => {
               const lower = kw.toLowerCase();
-              // 🚨 3글자 미만은 무조건 제외 (Q, 방, 게임 등)
-              if (lower.length < 3) {
-                return false;
-              }
-              // stopWords도 제외
+              // 초고빈도 단어는 길이 무관하게 제외
               return !highFreqStopWords.includes(lower);
             });
             
             // 중복 제거
             keywords = [...new Set(keywords)];
             
-            console.log(`🔍 최종 필터링 (3글자 미만 제거): ${beforeFilter}개 → ${keywords.length}개`, keywords);
+            console.log(`🔍 최종 필터링 (초고빈도 제거): ${beforeFilter}개 → ${keywords.length}개`, keywords);
             
             // 🚨 키워드가 없으면 원본 쿼리에서 3글자 이상 단어 추출
             if (keywords.length === 0) {
