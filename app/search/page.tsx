@@ -443,7 +443,17 @@ export default function SearchPage() {
                   <>
                     {/* AI 답변 생성 버튼 */}
                     {!data.groundedAnswer && data.items.length > 0 && (
-                      <div className="mb-4">
+                      <div className="mb-4 space-y-3">
+                        {/* 안내 박스 */}
+                        <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-xl border border-blue-200 dark:border-blue-800">
+                          <div className="text-xs text-blue-800 dark:text-blue-200">
+                            <strong>💡 팁:</strong> AI 답변은 <strong>내용이 추출된 문서만</strong> 분석합니다. 
+                            상위 10개 문서 중 내용이 추출되지 않은 문서가 있다면 
+                            <a href="/settings/integrations" className="underline font-semibold ml-1">설정 페이지</a>에서 
+                            &quot;📄 문서 내용 추출&quot; 버튼을 먼저 눌러주세요.
+                          </div>
+                        </div>
+                        
                         <button
                           onClick={onGenerateAnswer}
                           disabled={generatingAnswer}
@@ -481,8 +491,15 @@ export default function SearchPage() {
                               <strong>질문:</strong> {data.groundedAnswer.question}
                             </div>
                             <div className="text-xs text-purple-600 dark:text-purple-400">
-                              📚 분석 대상: 상위 {data.groundedAnswer.documentCount}개 문서 (최신순) | 
-                              ⏱️ 생성 시간: {Math.round(data.groundedAnswer.generationTime / 1000)}초 | 
+                              📚 분석 대상: 상위 10개 중 {data.groundedAnswer.documentCount}개 문서 (최신순)
+                              {data.groundedAnswer.missingContent > 0 && (
+                                <span className="ml-2 text-orange-600 dark:text-orange-400">
+                                  ⚠️ {data.groundedAnswer.missingContent}개는 내용 미추출
+                                </span>
+                              )}
+                              <span className="mx-2">|</span>
+                              ⏱️ 생성 시간: {Math.round(data.groundedAnswer.generationTime / 1000)}초
+                              <span className="mx-2">|</span>
                               📎 인용: {data.groundedAnswer.citations.length}개 문서
                             </div>
                           </div>
@@ -506,11 +523,25 @@ export default function SearchPage() {
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-100 dark:bg-purple-900/50 border border-purple-300 dark:border-purple-700 hover:bg-purple-200 dark:hover:bg-purple-900 transition-colors text-xs font-medium text-purple-900 dark:text-purple-100"
+                                  title="클릭하여 문서 열기 (전체 문서가 열립니다)"
                                 >
                                   <span>📄</span>
                                   <span className="truncate max-w-[200px]">{citation.title}</span>
                                 </a>
                               ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* 문서 추출 안내 */}
+                        {data.groundedAnswer.missingContent > 0 && (
+                          <div className="mt-4 p-3 bg-orange-50 dark:bg-orange-950/20 rounded-xl border border-orange-200 dark:border-orange-800">
+                            <div className="text-xs text-orange-800 dark:text-orange-200">
+                              ⚠️ <strong>{data.groundedAnswer.missingContent}개 문서는 내용이 추출되지 않아 분석에서 제외되었습니다.</strong>
+                              <br />
+                              더 정확한 답변을 받으려면 
+                              <a href="/settings/integrations" className="underline font-semibold ml-1">설정 페이지</a>에서 
+                              &quot;📄 문서 내용 추출&quot; 버튼을 눌러주세요.
                             </div>
                           </div>
                         )}

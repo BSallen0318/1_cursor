@@ -858,19 +858,32 @@ export async function POST(req: Request) {
             console.log(`🧠 Gemini Grounding 시작...`);
             const groundingStartTime = Date.now();
             
-            // 상위 10개 문서의 내용 수집 (content가 있는 것만)
-            const topDocsForGrounding = filtered
-              .filter((d: any) => d.content && d.content.trim().length > 100)
-              .slice(0, 10)
-              .map((d: any) => ({
-                id: d.id,
-                title: d.title,
-                content: d.content,
-                url: d.url,
-                updatedAt: d.updatedAt  // 최신순 정렬용
-              }));
+            // 상위 10개 문서의 내용 수집
+            const top10Docs = filtered.slice(0, 10);
+            console.log(`   📋 상위 10개 문서 중:`);
             
-            console.log(`   📚 Grounding 대상 문서: ${topDocsForGrounding.length}개`);
+            const docsWithContent = top10Docs.filter((d: any) => d.content && d.content.trim().length > 100);
+            const docsWithoutContent = top10Docs.filter((d: any) => !d.content || d.content.trim().length <= 100);
+            
+            console.log(`      ✅ content 있음: ${docsWithContent.length}개`);
+            console.log(`      ⚠️ content 없음: ${docsWithoutContent.length}개`);
+            
+            if (docsWithoutContent.length > 0) {
+              console.log(`   📝 content 없는 문서 (추출 필요):`);
+              docsWithoutContent.slice(0, 3).forEach((d: any, idx: number) => {
+                console.log(`      ${idx + 1}. "${d.title.slice(0, 40)}" (${d.mime_type || 'unknown'})`);
+              });
+            }
+            
+            const topDocsForGrounding = docsWithContent.map((d: any) => ({
+              id: d.id,
+              title: d.title,
+              content: d.content,
+              url: d.url,
+              updatedAt: d.updatedAt  // 최신순 정렬용
+            }));
+            
+            console.log(`   📚 Grounding 실제 대상: ${topDocsForGrounding.length}개`);
             
             if (topDocsForGrounding.length > 0) {
               const { generateGroundedAnswer } = await import('@/lib/ai');
@@ -882,7 +895,9 @@ export async function POST(req: Request) {
                 question: userQuery,
                 answer: result.answer,
                 citations: result.citations,
-                documentCount: topDocsForGrounding.length,
+                documentCount: topDocsForGrounding.length,  // 실제 분석된 개수
+                totalCandidates: top10Docs.length,  // 전체 후보 개수 (10개)
+                missingContent: docsWithoutContent.length,  // content 없는 개수
                 generationTime: Date.now() - groundingStartTime
               };
               
