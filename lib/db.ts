@@ -1,7 +1,53 @@
-import { sql } from '@vercel/postgres';
+import { Pool, QueryResult } from 'pg';
 
-// sql을 re-export
-export { sql };
+// PostgreSQL Connection Pool
+let pool: Pool | null = null;
+
+function getPool(): Pool {
+  if (!pool) {
+    const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+    
+    if (!connectionString) {
+      throw new Error('❌ POSTGRES_URL 환경변수가 설정되지 않았습니다.');
+    }
+    
+    pool = new Pool({
+      connectionString,
+      max: 20, // 최대 연결 수
+      idleTimeoutMillis: 30000, // 30초
+      connectionTimeoutMillis: 10000, // 10초
+      ssl: connectionString.includes('sslmode=require') 
+        ? { rejectUnauthorized: false } 
+        : undefined
+    });
+    
+    console.log('✅ PostgreSQL Pool 생성 완료');
+  }
+  
+  return pool;
+}
+
+// sql helper function (for compatibility)
+export async function sql(
+  strings: TemplateStringsArray,
+  ...values: any[]
+): Promise<QueryResult> {
+  const pool = getPool();
+  
+  // Tagged template을 pg 형식으로 변환
+  let text = '';
+  for (let i = 0; i < strings.length; i++) {
+    text += strings[i];
+    if (i < values.length) {
+      text += `$${i + 1}`;
+    }
+  }
+  
+  return pool.query(text, values);
+}
+
+// sql object with rows property
+sql.rows = [] as any[];
 
 export interface DocRecord {
   id: string;
@@ -24,9 +70,11 @@ export interface DocRecord {
 
 // 스키마 초기화
 export async function initSchema() {
+  const pool = getPool();
+  
   try {
     // 문서 색인 테이블
-    await sql`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS documents (
         id TEXT PRIMARY KEY,
         platform TEXT NOT NULL,
@@ -53,11 +101,11 @@ export async function initSchema() {
           )
         ) STORED
       )
-    `;
+    `);
 
     // 기존 테이블에 content 컬럼이 없으면 추가 (마이그레이션)
     try {
-      await sql`ALTER TABLE documents ADD COLUMN IF NOT EXISTS content TEXT`;
+      await pool.query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS content TEXT`);
       console.log('✅ content 컬럼 마이그레이션 완료');
     } catch (e: any) {
       // 이미 존재하면 무시
@@ -68,7 +116,7 @@ export async function initSchema() {
 
     // is_my_drive 컬럼 추가 (마이그레이션)
     try {
-      await sql`ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_my_drive BOOLEAN DEFAULT FALSE`;
+      await pool.query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_my_drive BOOLEAN DEFAULT FALSE`);
       console.log('✅ is_my_drive 컬럼 마이그레이션 완료');
     } catch (e: any) {
       if (!e?.message?.includes('already exists')) {
@@ -78,11 +126,11 @@ export async function initSchema() {
 
     // search_vector 재생성 (content 포함)
     try {
-      await sql`
+      await pool.query(`
         ALTER TABLE documents 
         DROP COLUMN IF EXISTS search_vector CASCADE
-      `;
-      await sql`
+      `);
+      await pool.query(`
         ALTER TABLE documents 
         ADD COLUMN search_vector tsvector GENERATED ALWAYS AS (
           to_tsvector('simple', 
@@ -92,29 +140,29 @@ export async function initSchema() {
             coalesce(path, '')
           )
         ) STORED
-      `;
+      `);
       console.log('✅ search_vector 재생성 완료');
     } catch (e: any) {
       console.log('⚠️ search_vector 재생성 실패:', e?.message);
     }
 
     // 검색 최적화를 위한 인덱스
-    await sql`CREATE INDEX IF NOT EXISTS idx_platform ON documents(platform)`;
-    await sql`CREATE INDEX IF NOT EXISTS idx_kind ON documents(kind)`;
-    await sql`CREATE INDEX IF NOT EXISTS idx_updated_at ON documents(updated_at DESC)`;
-    await sql`CREATE INDEX IF NOT EXISTS idx_indexed_at ON documents(indexed_at DESC)`;
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_platform ON documents(platform)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_kind ON documents(kind)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_updated_at ON documents(updated_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_indexed_at ON documents(indexed_at DESC)`);
     
     // 전문 검색 인덱스 (GIN)
-    await sql`CREATE INDEX IF NOT EXISTS idx_search_vector ON documents USING GIN(search_vector)`;
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_search_vector ON documents USING GIN(search_vector)`);
 
     // 색인 메타데이터 테이블
-    await sql`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS index_metadata (
         key TEXT PRIMARY KEY,
         value TEXT,
         updated_at BIGINT
       )
-    `;
+    `);
 
     console.log('✅ PostgreSQL 스키마 초기화 완료');
   } catch (error: any) {
@@ -125,29 +173,16 @@ export async function initSchema() {
 
 // 문서 삽입 또는 업데이트 (upsert)
 export async function upsertDocument(doc: DocRecord) {
+  const pool = getPool();
+  
   try {
-    await sql`
+    await pool.query(`
       INSERT INTO documents (
         id, platform, kind, title, snippet, content, url, path,
         owner_id, owner_name, owner_email, updated_at,
         mime_type, drive_id, is_my_drive, indexed_at
       ) VALUES (
-        ${doc.id},
-        ${doc.platform},
-        ${doc.kind || null},
-        ${doc.title},
-        ${doc.snippet || null},
-        ${doc.content || null},
-        ${doc.url || null},
-        ${doc.path || null},
-        ${doc.owner_id || null},
-        ${doc.owner_name || null},
-        ${doc.owner_email || null},
-        ${doc.updated_at || null},
-        ${doc.mime_type || null},
-        ${doc.drive_id || null},
-        ${doc.is_my_drive || false},
-        ${doc.indexed_at}
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
       )
       ON CONFLICT(id) DO UPDATE SET
         platform = EXCLUDED.platform,
@@ -165,7 +200,24 @@ export async function upsertDocument(doc: DocRecord) {
         drive_id = EXCLUDED.drive_id,
         is_my_drive = EXCLUDED.is_my_drive,
         indexed_at = EXCLUDED.indexed_at
-    `;
+    `, [
+      doc.id,
+      doc.platform,
+      doc.kind || null,
+      doc.title,
+      doc.snippet || null,
+      doc.content || null,
+      doc.url || null,
+      doc.path || null,
+      doc.owner_id || null,
+      doc.owner_name || null,
+      doc.owner_email || null,
+      doc.updated_at || null,
+      doc.mime_type || null,
+      doc.drive_id || null,
+      doc.is_my_drive || false,
+      doc.indexed_at
+    ]);
   } catch (error: any) {
     console.error('❌ 문서 저장 실패:', doc.id, error);
     throw error;
@@ -205,6 +257,8 @@ export async function searchDocuments(query: string, options: {
   limit?: number;
   offset?: number;
 }) {
+  const pool = getPool();
+  
   try {
     const limit = options.limit || 100;
     const offset = options.offset || 0;
@@ -215,37 +269,37 @@ export async function searchDocuments(query: string, options: {
     let result;
     
     if (options.platform && options.kind) {
-      result = await sql`
+      result = await pool.query(`
         SELECT * FROM documents
-        WHERE search_vector @@ to_tsquery('simple', ${searchQuery})
-          AND platform = ${options.platform}
-          AND kind = ${options.kind}
+        WHERE search_vector @@ to_tsquery('simple', $1)
+          AND platform = $2
+          AND kind = $3
         ORDER BY updated_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `;
+        LIMIT $4 OFFSET $5
+      `, [searchQuery, options.platform, options.kind, limit, offset]);
     } else if (options.platform) {
-      result = await sql`
+      result = await pool.query(`
         SELECT * FROM documents
-        WHERE search_vector @@ to_tsquery('simple', ${searchQuery})
-          AND platform = ${options.platform}
+        WHERE search_vector @@ to_tsquery('simple', $1)
+          AND platform = $2
         ORDER BY updated_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `;
+        LIMIT $3 OFFSET $4
+      `, [searchQuery, options.platform, limit, offset]);
     } else if (options.kind) {
-      result = await sql`
+      result = await pool.query(`
         SELECT * FROM documents
-        WHERE search_vector @@ to_tsquery('simple', ${searchQuery})
-          AND kind = ${options.kind}
+        WHERE search_vector @@ to_tsquery('simple', $1)
+          AND kind = $2
         ORDER BY updated_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `;
+        LIMIT $3 OFFSET $4
+      `, [searchQuery, options.kind, limit, offset]);
     } else {
-      result = await sql`
+      result = await pool.query(`
         SELECT * FROM documents
-        WHERE search_vector @@ to_tsquery('simple', ${searchQuery})
+        WHERE search_vector @@ to_tsquery('simple', $1)
         ORDER BY updated_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `;
+        LIMIT $2 OFFSET $3
+      `, [searchQuery, limit, offset]);
     }
     
     return result.rows as DocRecord[];
@@ -262,6 +316,8 @@ export async function searchDocumentsSimple(query: string, options: {
   limit?: number;
   offset?: number;
 }) {
+  const pool = getPool();
+  
   try {
     const limit = options.limit || 300; // 더 많이 가져와서 클라이언트에서 필터링
     const offset = options.offset || 0;
@@ -295,11 +351,6 @@ export async function searchDocumentsSimple(query: string, options: {
     
     console.log(`🔍 [DB] 검색 키워드 (길이순):`, sortedWords);
     
-    let result;
-    
-    // 모든 패턴으로 OR 검색 (넓게 가져옴)
-    // 첫 번째 패턴으로 기본 검색, 나머지는 추가로 검색
-    
     // 모든 키워드로 OR 검색 (각 키워드마다 별도 쿼리 후 병합)
     const allResults: DocRecord[] = [];
     const seenIds = new Set<string>();
@@ -308,53 +359,53 @@ export async function searchDocumentsSimple(query: string, options: {
       let partialResult;
       
       if (options.platform && options.kind) {
-        partialResult = await sql`
+        partialResult = await pool.query(`
           SELECT * FROM documents
           WHERE (
-            LOWER(title) LIKE ${pattern} ESCAPE '\'
-            OR LOWER(snippet) LIKE ${pattern} ESCAPE '\'
-            OR LOWER(content) LIKE ${pattern} ESCAPE '\'
-            OR LOWER(path) LIKE ${pattern} ESCAPE '\'
+            LOWER(title) LIKE $1 ESCAPE '\\'
+            OR LOWER(snippet) LIKE $1 ESCAPE '\\'
+            OR LOWER(content) LIKE $1 ESCAPE '\\'
+            OR LOWER(path) LIKE $1 ESCAPE '\\'
           )
-          AND platform = ${options.platform}
-          AND kind = ${options.kind}
+          AND platform = $2
+          AND kind = $3
           AND (platform != 'drive' OR is_my_drive = FALSE)
-        `;
+        `, [pattern, options.platform, options.kind]);
       } else if (options.platform) {
-        partialResult = await sql`
+        partialResult = await pool.query(`
           SELECT * FROM documents
           WHERE (
-            LOWER(title) LIKE ${pattern} ESCAPE '\'
-            OR LOWER(snippet) LIKE ${pattern} ESCAPE '\'
-            OR LOWER(content) LIKE ${pattern} ESCAPE '\'
-            OR LOWER(path) LIKE ${pattern} ESCAPE '\'
+            LOWER(title) LIKE $1 ESCAPE '\\'
+            OR LOWER(snippet) LIKE $1 ESCAPE '\\'
+            OR LOWER(content) LIKE $1 ESCAPE '\\'
+            OR LOWER(path) LIKE $1 ESCAPE '\\'
           )
-          AND platform = ${options.platform}
+          AND platform = $2
           AND (platform != 'drive' OR is_my_drive = FALSE)
-        `;
+        `, [pattern, options.platform]);
       } else if (options.kind) {
-        partialResult = await sql`
+        partialResult = await pool.query(`
           SELECT * FROM documents
           WHERE (
-            LOWER(title) LIKE ${pattern} ESCAPE '\'
-            OR LOWER(snippet) LIKE ${pattern} ESCAPE '\'
-            OR LOWER(content) LIKE ${pattern} ESCAPE '\'
-            OR LOWER(path) LIKE ${pattern} ESCAPE '\'
+            LOWER(title) LIKE $1 ESCAPE '\\'
+            OR LOWER(snippet) LIKE $1 ESCAPE '\\'
+            OR LOWER(content) LIKE $1 ESCAPE '\\'
+            OR LOWER(path) LIKE $1 ESCAPE '\\'
           )
-          AND kind = ${options.kind}
+          AND kind = $2
           AND (platform != 'drive' OR is_my_drive = FALSE)
-        `;
+        `, [pattern, options.kind]);
       } else {
-        partialResult = await sql`
+        partialResult = await pool.query(`
           SELECT * FROM documents
           WHERE (
-            LOWER(title) LIKE ${pattern} ESCAPE '\'
-            OR LOWER(snippet) LIKE ${pattern} ESCAPE '\'
-            OR LOWER(content) LIKE ${pattern} ESCAPE '\'
-            OR LOWER(path) LIKE ${pattern} ESCAPE '\'
+            LOWER(title) LIKE $1 ESCAPE '\\'
+            OR LOWER(snippet) LIKE $1 ESCAPE '\\'
+            OR LOWER(content) LIKE $1 ESCAPE '\\'
+            OR LOWER(path) LIKE $1 ESCAPE '\\'
           )
           AND (platform != 'drive' OR is_my_drive = FALSE)
-        `;
+        `, [pattern]);
       }
       
       // 중복 제거하며 병합
@@ -366,9 +417,7 @@ export async function searchDocumentsSimple(query: string, options: {
       }
     }
     
-    result = { rows: allResults };
-    
-    let rows = result.rows as DocRecord[];
+    let rows = allResults;
     
     // 나머지 패턴으로 메모리에서 필터링
     if (patterns.length > 1) {
@@ -449,18 +498,20 @@ export async function searchDocumentsSimple(query: string, options: {
 
 // 문서 개수 조회
 export async function getDocumentCount(platform?: string): Promise<number> {
+  const pool = getPool();
+  
   try {
     let result;
     
     if (platform) {
-      result = await sql`
+      result = await pool.query(`
         SELECT COUNT(*) as count FROM documents
-        WHERE platform = ${platform}
-      `;
+        WHERE platform = $1
+      `, [platform]);
     } else {
-      result = await sql`
+      result = await pool.query(`
         SELECT COUNT(*) as count FROM documents
-      `;
+      `);
     }
     
     return Number(result.rows[0]?.count || 0);
@@ -472,14 +523,16 @@ export async function getDocumentCount(platform?: string): Promise<number> {
 
 // 메타데이터 저장
 export async function setMetadata(key: string, value: string) {
+  const pool = getPool();
+  
   try {
-    await sql`
+    await pool.query(`
       INSERT INTO index_metadata (key, value, updated_at)
-      VALUES (${key}, ${value}, ${Date.now()})
+      VALUES ($1, $2, $3)
       ON CONFLICT(key) DO UPDATE SET
         value = EXCLUDED.value,
         updated_at = EXCLUDED.updated_at
-    `;
+    `, [key, value, Date.now()]);
   } catch (error: any) {
     console.error('❌ 메타데이터 저장 실패:', error);
     throw error;
@@ -488,10 +541,12 @@ export async function setMetadata(key: string, value: string) {
 
 // 메타데이터 조회
 export async function getMetadata(key: string): Promise<string | null> {
+  const pool = getPool();
+  
   try {
-    const result = await sql`
-      SELECT value FROM index_metadata WHERE key = ${key}
-    `;
+    const result = await pool.query(`
+      SELECT value FROM index_metadata WHERE key = $1
+    `, [key]);
     return result.rows[0]?.value || null;
   } catch (error: any) {
     console.error('❌ 메타데이터 조회 실패:', error);
@@ -501,8 +556,10 @@ export async function getMetadata(key: string): Promise<string | null> {
 
 // 전체 문서 삭제
 export async function clearAllDocuments() {
+  const pool = getPool();
+  
   try {
-    await sql`DELETE FROM documents`;
+    await pool.query(`DELETE FROM documents`);
     console.log('✅ 전체 문서 삭제 완료');
   } catch (error: any) {
     console.error('❌ 전체 문서 삭제 실패:', error);
@@ -512,8 +569,10 @@ export async function clearAllDocuments() {
 
 // 플랫폼별 문서 삭제
 export async function clearDocumentsByPlatform(platform: string) {
+  const pool = getPool();
+  
   try {
-    await sql`DELETE FROM documents WHERE platform = ${platform}`;
+    await pool.query(`DELETE FROM documents WHERE platform = $1`, [platform]);
     console.log(`✅ ${platform} 문서 삭제 완료`);
   } catch (error: any) {
     console.error(`❌ ${platform} 문서 삭제 실패:`, error);
