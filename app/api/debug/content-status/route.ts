@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
+import { sql } from '@/lib/db';
 
 // 특정 문서들의 content 상태 확인
 export async function POST(req: Request) {
