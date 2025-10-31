@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vxarchive-postgres
+    environment:
+      POSTGRES_USER: vxarchive
+      POSTGRES_PASSWORD: vxarchive123
+      POSTGRES_DB: vxarchive
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - storage_internal_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vxarchive"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  vxarchive:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vxarchive-app
+    ports:
+      - "4244:4244"
+    environment:
+      # PostgreSQL 연결
+      POSTGRES_URL: postgresql://vxarchive:vxarchive123@postgres:5432/vxarchive
+      # Google Drive (필수)
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:4244/api/integrations/drive/callback}
+      # Figma (선택)
+      FIGMA_ACCESS_TOKEN: ${FIGMA_ACCESS_TOKEN:-}
+      FIGMA_TEAM_IDS: ${FIGMA_TEAM_IDS:-}
+      FIGMA_PROJECT_IDS: ${FIGMA_PROJECT_IDS:-}
+      # Jira (선택)
+      JIRA_DOMAIN: ${JIRA_DOMAIN:-}
+      JIRA_EMAIL: ${JIRA_EMAIL:-}
+      JIRA_API_TOKEN: ${JIRA_API_TOKEN:-}
+      # AI (선택)
+      AI_PROVIDER: ${AI_PROVIDER:-gemini}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - storage_internal_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  storage_internal_network:
+    driver: bridge
+
+volumes:
+  postgres_data:

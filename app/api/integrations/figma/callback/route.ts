@@ -16,7 +16,11 @@ export async function GET(req: NextRequest) {
 		const redirectUri = process.env.FIGMA_REDIRECT_URI || 'http://localhost:3000/api/integrations/figma/callback';
 		const tokens = await figmaExchangeCode(code, redirectUri);
 		const encoded = Buffer.from(JSON.stringify(tokens), 'utf-8').toString('base64');
-		const res = NextResponse.redirect(new URL('/settings/integrations?figma=connected', req.url));
+		// 실제 요청된 호스트를 사용하여 리다이렉트 URL 구성
+		const protocol = req.headers.get('x-forwarded-proto') || 'http';
+		const host = req.headers.get('host') || 'localhost:4244';
+		const redirectUrl = `${protocol}://${host}/settings/integrations?figma=connected`;
+		const res = NextResponse.redirect(redirectUrl);
 		res.cookies.set('figma_tokens', encoded, {
 			httpOnly: true,
 			sameSite: 'lax',

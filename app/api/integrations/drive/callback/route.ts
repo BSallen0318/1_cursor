@@ -7,7 +7,11 @@ export async function GET(req: NextRequest) {
   try {
     const tokens = await exchangeCode(code);
     // NOTE: 데모 저장 방식 - 실제로는 DB/kv 저장을 권장합니다
-    const res = NextResponse.redirect(new URL('/settings/integrations?drive=connected', req.url));
+    // 실제 요청된 호스트를 사용하여 리다이렉트 URL 구성
+    const protocol = req.headers.get('x-forwarded-proto') || 'http';
+    const host = req.headers.get('host') || 'localhost:4244';
+    const redirectUrl = `${protocol}://${host}/settings/integrations?drive=connected`;
+    const res = NextResponse.redirect(redirectUrl);
     const encoded = Buffer.from(JSON.stringify(tokens), 'utf-8').toString('base64');
     res.cookies.set('drive_tokens', encoded, {
       httpOnly: true,
